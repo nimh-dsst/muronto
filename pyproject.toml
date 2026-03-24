@@ -1,0 +1,34 @@
+[project]
+name = "muronto"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "labapi",
+    "streamlit>=1.55.0",
+]
+
+[tool.uv.sources]
+labapi = { git = "ssh://git@github.com/nimh-dsst/labarchives-api.git" }
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.15.7",
+]
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+extend-select = ["I", "E501"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["Login.py"]
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["labapi"]
+ignore_missing_imports = true
