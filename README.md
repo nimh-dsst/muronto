@@ -27,5 +27,7 @@ Run the page with `streamlit run Project.py`, then sign in to LabArchives from t
 1. Configure API access with `ACCESS_KEYID` and `ACCESS_PWD` in the environment. `API_URL` is optional and defaults to `https://api.labarchives.com`.
 2. Authenticate with LabArchives. Click `Open LabArchives sign-in` to complete the browser-based flow and return to the page automatically.
 3. After sign-in, choose a notebook and create or reuse the root-level `muronto_config` page.
-4. If the config JSON attachment is missing or invalid, complete the project configuration form and select a LabArchives home folder.
-5. Use `Sign out` to clear the current session and return to the login form.
+4. If the config JSON attachment is missing or invalid, create a v2 config by adding the first project and selecting its LabArchives home folder. Legacy single-project configs must be replaced.
+5. Use the Project page to select the active project, edit its details, or add another project in the same notebook.
+6. Use the Subject and Surgery pages after selecting the active project.
+7. Use `Sign out` to clear the current session and return to the login form.

@@ -5,13 +5,23 @@ from io import BytesIO
 from typing import Any
 
 from muronto_app.config import (
+    ASP_KEY,
     CONFIG_CAPTION,
     CONFIG_FILENAME,
     CONFIG_PAGE_NAME,
     DEFAULT_OPTIONS,
+    DEFAULT_PROJECT_ID_KEY,
     EMAIL_TO_INVESTIGATOR_KEY,
+    EMAIL_TO_PROJECT_KEY,
     LA_HOME_FOLDER_KEY,
     OPTIONS_KEY,
+    PI_KEY,
+    PROJECT_ID_KEY,
+    PROJECT_NAME_KEY,
+    PROJECTS_KEY,
+    SCHEMA_VERSION,
+    SCHEMA_VERSION_KEY,
+    SPECIES_KEY,
 )
 from muronto_app.labarchives import (
     attachment_matches_config,
@@ -153,17 +163,24 @@ class FakeSubjectContainer:
 
 def config_payload() -> dict[str, Any]:
     payload = {
-        "project_id": "SEASIC",
-        "project_name": (
-            "Sensory Evidence Accumulation Synaptic Integration in Cortex"
-        ),
-        "LA_Home_Folder": "/Experiments",
-        "Investigator": "APF",
-        "PI": "Soohyun Lee",
-        "Species": "Mouse",
-        "ASP": "UFNC-01",
+        SCHEMA_VERSION_KEY: SCHEMA_VERSION,
+        DEFAULT_PROJECT_ID_KEY: "SEASIC",
+        PROJECTS_KEY: {
+            "SEASIC": {
+                PROJECT_ID_KEY: "SEASIC",
+                PROJECT_NAME_KEY: (
+                    "Sensory Evidence Accumulation Synaptic Integration "
+                    "in Cortex"
+                ),
+                LA_HOME_FOLDER_KEY: "/Experiments",
+                PI_KEY: "Soohyun Lee",
+                SPECIES_KEY: "Mouse",
+                ASP_KEY: "UFNC-01",
+            }
+        },
         EMAIL_TO_INVESTIGATOR_KEY: {},
-        OPTIONS_KEY: {**DEFAULT_OPTIONS, LA_HOME_FOLDER_KEY: ["/Experiments"]},
+        EMAIL_TO_PROJECT_KEY: {},
+        OPTIONS_KEY: DEFAULT_OPTIONS,
     }
     return payload
 
@@ -191,7 +208,10 @@ def test_read_config_attachment_returns_valid_config() -> None:
 
     assert result.errors == []
     assert result.config is not None
-    assert result.config[LA_HOME_FOLDER_KEY] == "/Experiments"
+    assert (
+        result.config[PROJECTS_KEY]["SEASIC"][LA_HOME_FOLDER_KEY]
+        == "/Experiments"
+    )
 
 
 def test_read_config_attachment_reports_invalid_json() -> None:

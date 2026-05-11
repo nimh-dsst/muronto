@@ -11,22 +11,27 @@ from labapi import ApiError, AuthenticationError, Client, Notebook, User
 from muronto_app.config import (
     ASP_KEY,
     DEFAULT_OPTIONS,
+    DEFAULT_PROJECT_ID_KEY,
     DEFAULT_VALUES,
-    EMAIL_TO_INVESTIGATOR_KEY,
     INVESTIGATOR_KEY,
     LA_HOME_FOLDER_KEY,
+    OPTIONS_KEY,
     OTHER_CHOICE,
     PI_KEY,
     PROJECT_ID_KEY,
     PROJECT_NAME_KEY,
+    PROJECTS_KEY,
     SPECIES_KEY,
-    build_config,
     choice_options,
     clean_string,
+    get_project,
+    investigator_for_user,
     normalize_options,
+    project_ids,
+    select_project_id,
+    upsert_project_config,
 )
 from muronto_app.labarchives import (
-    ConfigReadResult,
     absolute_path,
     create_directory,
     create_root_config_page,
@@ -54,6 +59,7 @@ from muronto_app.state import (
     SELECTED_NOTEBOOK_ID_KEY,
     SELECTED_NOTEBOOK_NAME_STATE_KEY,
     SELECTED_NOTEBOOK_STATE_KEY,
+    SELECTED_PROJECT_ID_STATE_KEY,
     USER_EMAIL_INPUT_KEY,
     USER_STATE_KEY,
     project_state_keys,
@@ -63,6 +69,7 @@ DEFAULT_API_URL: Final[str] = "https://api.labarchives.com"
 CLIENT_ENV_VARS: Final[tuple[str, str]] = ("ACCESS_KEYID", "ACCESS_PWD")
 LABARCHIVES_BUTTON_BLUE: Final[str] = "#0b66d4"
 LABARCHIVES_BUTTON_BLUE_HOVER: Final[str] = "#0953ac"
+PROJECT_FORM_CONTEXT_KEY: Final[str] = "muronto_project_form_context"
 
 
 st.set_page_config(page_title="Muronto Project", layout="centered")
@@ -127,6 +134,7 @@ def complete_login(user_email: str, auth_code: str) -> User:
 def reset_project_state() -> None:
     for key in project_state_keys():
         st.session_state.pop(key, None)
+    st.session_state.pop(PROJECT_FORM_CONTEXT_KEY, None)
     st.session_state[CONFIG_FOLDER_PATH_KEY] = ""
     st.session_state[CONFIG_SELECTED_HOME_FOLDER_KEY] = ""
     st.session_state[CONFIG_FOLDER_SELECT_KEY] = FOLDER_SELECTION_PLACEHOLDER
@@ -337,28 +345,13 @@ def render_notebook_selection(user: User) -> Notebook | None:
     return selected_notebook
 
 
-def initial_value(
-    key: str,
-    options: dict[str, list[str]],
-    user_email: str,
-) -> str:
-    if key == INVESTIGATOR_KEY:
-        config = st.session_state.get(CONFIG_STATE_KEY)
-        if isinstance(config, dict):
-            mapping = config.get(EMAIL_TO_INVESTIGATOR_KEY, {})
-            if isinstance(mapping, dict):
-                mapped_value = clean_string(mapping.get(user_email))
-                if mapped_value:
-                    return mapped_value
-    return DEFAULT_VALUES[key] if key != LA_HOME_FOLDER_KEY else ""
-
-
 def render_select_with_other(
     label: str,
     key: str,
     options: dict[str, list[str]],
     *,
     default_value: str,
+    widget_prefix: str,
 ) -> str:
     choices = choice_options(options, key)
     selected_default = (
@@ -368,7 +361,7 @@ def render_select_with_other(
         label,
         options=choices,
         index=choices.index(selected_default),
-        key=f"config_{key}",
+        key=f"{widget_prefix}_{key}",
     )
 
     if selected != OTHER_CHOICE:
@@ -377,7 +370,7 @@ def render_select_with_other(
     return clean_string(
         st.text_input(
             f"New {label}",
-            key=f"config_{key}_other",
+            key=f"{widget_prefix}_{key}_other",
         )
     )
 
@@ -515,111 +508,306 @@ def render_home_folder_picker(notebook: Notebook) -> str:
     return st.session_state.get(CONFIG_SELECTED_HOME_FOLDER_KEY, "")
 
 
-def render_config_summary(config: dict[str, Any]) -> None:
+def reset_config_folder_state() -> None:
+    st.session_state[CONFIG_FOLDER_PATH_KEY] = ""
+    st.session_state[CONFIG_SELECTED_HOME_FOLDER_KEY] = ""
+    st.session_state[CONFIG_FOLDER_SELECT_KEY] = FOLDER_SELECTION_PLACEHOLDER
+    st.session_state.pop(PROJECT_FORM_CONTEXT_KEY, None)
+
+
+def prepare_home_folder_picker(
+    *,
+    context_key: str,
+    initial_home_folder: str,
+) -> None:
+    if st.session_state.get(PROJECT_FORM_CONTEXT_KEY) == context_key:
+        return
+
+    st.session_state[PROJECT_FORM_CONTEXT_KEY] = context_key
+    st.session_state[CONFIG_FOLDER_PATH_KEY] = ""
+    st.session_state[CONFIG_SELECTED_HOME_FOLDER_KEY] = initial_home_folder
+    st.session_state[CONFIG_FOLDER_SELECT_KEY] = FOLDER_SELECTION_PLACEHOLDER
+
+
+def format_project_label(config: dict[str, Any], project_id: str) -> str:
+    project = get_project(config, project_id)
+    if project is None:
+        return project_id
+    return f"{project_id} - {project[PROJECT_NAME_KEY]}"
+
+
+def render_active_project_selector(
+    config: dict[str, Any],
+    user: User,
+) -> str:
+    available_project_ids = project_ids(config)
+    selected_project_id = select_project_id(
+        config,
+        user.email,
+        st.session_state.get(SELECTED_PROJECT_ID_STATE_KEY),
+    )
+    if selected_project_id:
+        st.session_state[SELECTED_PROJECT_ID_STATE_KEY] = selected_project_id
+
+    return st.selectbox(
+        "Active project",
+        options=available_project_ids,
+        key=SELECTED_PROJECT_ID_STATE_KEY,
+        on_change=reset_config_folder_state,
+        format_func=lambda project_id: format_project_label(
+            config,
+            project_id,
+        ),
+    )
+
+
+def render_config_summary(
+    config: dict[str, Any],
+    project: dict[str, str],
+    investigator: str,
+) -> None:
     st.success("muronto_config is ready.")
-    st.subheader("Project configuration")
-    st.write(f"Project ID: {config[PROJECT_ID_KEY]}")
-    st.write(f"Project name: {config[PROJECT_NAME_KEY]}")
-    st.write(f"LabArchives home folder: {config[LA_HOME_FOLDER_KEY]}")
-    st.write(f"Investigator: {config[INVESTIGATOR_KEY]}")
-    st.write(f"PI: {config[PI_KEY]}")
-    st.write(f"Species: {config[SPECIES_KEY]}")
-    st.write(f"ASP: {config[ASP_KEY]}")
+    st.subheader("Active project")
+    st.write(f"Project ID: {project[PROJECT_ID_KEY]}")
+    st.write(f"Project name: {project[PROJECT_NAME_KEY]}")
+    st.write(f"LabArchives home folder: {project[LA_HOME_FOLDER_KEY]}")
+    st.write(f"Investigator: {investigator}")
+    st.write(f"PI: {project[PI_KEY]}")
+    st.write(f"Species: {project[SPECIES_KEY]}")
+    st.write(f"ASP: {project[ASP_KEY]}")
+    st.caption(
+        f"{len(config[PROJECTS_KEY])} project"
+        f"{'' if len(config[PROJECTS_KEY]) == 1 else 's'} configured. "
+        f"Notebook default: {config[DEFAULT_PROJECT_ID_KEY]}."
+    )
 
     with st.expander("Config JSON", expanded=False):
         st.json(config)
 
 
-def render_config_form(
+def project_form_defaults(
+    project: dict[str, str] | None,
+) -> dict[str, str]:
+    defaults: dict[str, str] = {}
+    for key in (
+        PROJECT_ID_KEY,
+        PROJECT_NAME_KEY,
+        LA_HOME_FOLDER_KEY,
+        PI_KEY,
+        SPECIES_KEY,
+        ASP_KEY,
+    ):
+        defaults[key] = (
+            clean_string(project.get(key))
+            if project is not None
+            else DEFAULT_VALUES[key]
+        )
+    return defaults
+
+
+def save_project_config(
+    *,
+    user: User,
+    config_page: Any,
+    existing_entry: Any | None,
+    existing_config: dict[str, Any] | None,
+    selected_values: dict[str, str],
+    investigator: str,
+    remember_investigator: bool,
+    make_default: bool,
+    options: dict[str, list[str]],
+) -> None:
+    missing_fields = [
+        key
+        for key, value in selected_values.items()
+        if not clean_string(value)
+    ]
+    if not clean_string(investigator):
+        missing_fields.append(INVESTIGATOR_KEY)
+
+    if missing_fields:
+        st.error(
+            "Complete these fields before saving: "
+            + ", ".join(missing_fields)
+            + "."
+        )
+        return
+
+    try:
+        config = upsert_project_config(
+            existing_config,
+            selected_values,
+            investigator=investigator,
+            options=options,
+            user_email=user.email,
+            remember_investigator=remember_investigator,
+            remember_project=True,
+            make_default=make_default,
+        )
+        attachment_entry = save_config_attachment(
+            config_page,
+            config,
+            existing_entry=existing_entry,
+        )
+    except ApiError as exc:
+        st.error(f"Unable to save muronto_config JSON: {exc}")
+        return
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+
+    st.session_state[CONFIG_STATE_KEY] = config
+    st.session_state[CONFIG_ATTACHMENT_STATE_KEY] = attachment_entry
+    st.session_state[CONFIG_PAGE_STATE_KEY] = config_page
+    st.session_state[CONFIG_PAGE_ID_STATE_KEY] = config_page.id
+    st.session_state[CONFIG_ERROR_STATE_KEY] = None
+    st.session_state[SELECTED_PROJECT_ID_STATE_KEY] = selected_values[
+        PROJECT_ID_KEY
+    ]
+    st.success("Saved muronto_config JSON.")
+    st.rerun()
+
+
+def render_project_editor(
     user: User,
     notebook: Notebook,
     config_page: Any,
-    read_result: ConfigReadResult,
+    *,
+    existing_entry: Any | None,
+    existing_config: dict[str, Any] | None,
+    project: dict[str, str] | None,
+    mode: str,
 ) -> None:
-    st.subheader("Create muronto_config JSON")
-    options = normalize_options(DEFAULT_OPTIONS)
-    selected_values: dict[str, str] = {}
+    is_edit = project is not None
+    heading = "Edit project" if is_edit else "Add project"
+    st.subheader(heading)
 
-    selected_values[PROJECT_ID_KEY] = render_select_with_other(
-        "Project ID",
-        PROJECT_ID_KEY,
-        options,
-        default_value=initial_value(PROJECT_ID_KEY, options, user.email),
+    options = normalize_options(
+        existing_config.get(OPTIONS_KEY)
+        if existing_config is not None
+        else DEFAULT_OPTIONS
     )
-    selected_values[PROJECT_NAME_KEY] = render_select_with_other(
-        "Project name",
-        PROJECT_NAME_KEY,
-        options,
-        default_value=initial_value(PROJECT_NAME_KEY, options, user.email),
+    defaults = project_form_defaults(project)
+    widget_prefix = (
+        f"project_edit_{defaults[PROJECT_ID_KEY]}"
+        if is_edit
+        else "project_add"
     )
-    selected_values[INVESTIGATOR_KEY] = render_select_with_other(
+
+    prepare_home_folder_picker(
+        context_key=f"{mode}:{defaults[PROJECT_ID_KEY] if is_edit else 'new'}",
+        initial_home_folder=(defaults[LA_HOME_FOLDER_KEY] if is_edit else ""),
+    )
+
+    selected_values: dict[str, str] = {}
+    selected_values[PROJECT_ID_KEY] = clean_string(
+        st.text_input(
+            "Project ID",
+            value=defaults[PROJECT_ID_KEY] if is_edit else "",
+            disabled=is_edit,
+            key=f"{widget_prefix}_{PROJECT_ID_KEY}",
+        )
+    )
+    selected_values[PROJECT_NAME_KEY] = clean_string(
+        st.text_input(
+            "Project name",
+            value=defaults[PROJECT_NAME_KEY] if is_edit else "",
+            key=f"{widget_prefix}_{PROJECT_NAME_KEY}",
+        )
+    )
+
+    investigator = render_select_with_other(
         "Investigator",
         INVESTIGATOR_KEY,
         options,
-        default_value=initial_value(INVESTIGATOR_KEY, options, user.email),
+        default_value=investigator_for_user(existing_config or {}, user.email),
+        widget_prefix=widget_prefix,
     )
     remember_email = st.checkbox(
         "Use this investigator for my LabArchives email",
         value=True,
+        key=f"{widget_prefix}_remember_investigator",
     )
 
-    st.text_input("PI", value=DEFAULT_VALUES[PI_KEY], disabled=True)
-    selected_values[PI_KEY] = DEFAULT_VALUES[PI_KEY]
+    selected_values[PI_KEY] = render_select_with_other(
+        "PI",
+        PI_KEY,
+        options,
+        default_value=defaults[PI_KEY],
+        widget_prefix=widget_prefix,
+    )
 
     selected_values[SPECIES_KEY] = render_select_with_other(
         "Species",
         SPECIES_KEY,
         options,
-        default_value=initial_value(SPECIES_KEY, options, user.email),
+        default_value=defaults[SPECIES_KEY],
+        widget_prefix=widget_prefix,
     )
     selected_values[ASP_KEY] = render_select_with_other(
         "ASP",
         ASP_KEY,
         options,
-        default_value=initial_value(ASP_KEY, options, user.email),
+        default_value=defaults[ASP_KEY],
+        widget_prefix=widget_prefix,
     )
     selected_values[LA_HOME_FOLDER_KEY] = render_home_folder_picker(notebook)
 
-    if st.button("Save muronto_config JSON", type="primary"):
-        missing_fields = [
-            key
-            for key, value in selected_values.items()
-            if not clean_string(value)
-        ]
-        if missing_fields:
-            st.error(
-                "Complete these fields before saving: "
-                + ", ".join(missing_fields)
-                + "."
-            )
-            return
+    make_default = st.checkbox(
+        "Set this as the notebook default project",
+        value=(existing_config is None or not project_ids(existing_config)),
+        key=f"{widget_prefix}_make_default",
+    )
 
-        try:
-            config = build_config(
-                selected_values,
-                options=options,
-                user_email=user.email,
-                remember_investigator=remember_email,
-            )
-            attachment_entry = save_config_attachment(
-                config_page,
-                config,
-                existing_entry=read_result.entry,
-            )
-        except ApiError as exc:
-            st.error(f"Unable to save muronto_config JSON: {exc}")
-            return
-        except ValueError as exc:
-            st.error(str(exc))
-            return
+    if st.button("Save project", type="primary", key=f"{widget_prefix}_save"):
+        save_project_config(
+            user=user,
+            config_page=config_page,
+            existing_entry=existing_entry,
+            existing_config=existing_config,
+            selected_values=selected_values,
+            investigator=investigator,
+            remember_investigator=remember_email,
+            make_default=make_default,
+            options=options,
+        )
 
-        st.session_state[CONFIG_STATE_KEY] = config
-        st.session_state[CONFIG_ATTACHMENT_STATE_KEY] = attachment_entry
-        st.session_state[CONFIG_PAGE_STATE_KEY] = config_page
-        st.session_state[CONFIG_PAGE_ID_STATE_KEY] = config_page.id
-        st.session_state[CONFIG_ERROR_STATE_KEY] = None
-        st.success("Saved muronto_config JSON.")
-        st.rerun()
+
+def render_project_manager(
+    user: User,
+    notebook: Notebook,
+    config_page: Any,
+    config: dict[str, Any],
+    existing_entry: Any | None,
+) -> None:
+    selected_project_id = render_active_project_selector(config, user)
+    project = get_project(config, selected_project_id)
+    if project is None:
+        st.error("The selected project could not be loaded.")
+        return
+
+    render_config_summary(
+        config,
+        project,
+        investigator_for_user(config, user.email),
+    )
+
+    action = st.radio(
+        "Project action",
+        options=("Edit selected project", "Add project"),
+        horizontal=True,
+        key="project_action",
+        on_change=reset_config_folder_state,
+    )
+    render_project_editor(
+        user,
+        notebook,
+        config_page,
+        existing_entry=existing_entry,
+        existing_config=config,
+        project=project if action == "Edit selected project" else None,
+        mode=action,
+    )
 
 
 def render_project_config(user: User, notebook: Notebook) -> None:
@@ -651,7 +839,13 @@ def render_project_config(user: User, notebook: Notebook) -> None:
     cached_page_id = st.session_state.get(CONFIG_PAGE_ID_STATE_KEY)
     if isinstance(cached_config, dict) and cached_page_id == config_page.id:
         st.session_state[CONFIG_PAGE_STATE_KEY] = config_page
-        render_config_summary(cached_config)
+        render_project_manager(
+            user,
+            notebook,
+            config_page,
+            cached_config,
+            st.session_state.get(CONFIG_ATTACHMENT_STATE_KEY),
+        )
         return
 
     st.session_state[CONFIG_PAGE_STATE_KEY] = config_page
@@ -661,7 +855,13 @@ def render_project_config(user: User, notebook: Notebook) -> None:
     if read_result.config is not None:
         st.session_state[CONFIG_STATE_KEY] = read_result.config
         st.session_state[CONFIG_ATTACHMENT_STATE_KEY] = read_result.entry
-        render_config_summary(read_result.config)
+        render_project_manager(
+            user,
+            notebook,
+            config_page,
+            read_result.config,
+            read_result.entry,
+        )
         return
 
     st.session_state[CONFIG_ERROR_STATE_KEY] = read_result.errors
@@ -672,7 +872,15 @@ def render_project_config(user: User, notebook: Notebook) -> None:
         for error in read_result.errors:
             st.caption(error)
 
-    render_config_form(user, notebook, config_page, read_result)
+    render_project_editor(
+        user,
+        notebook,
+        config_page,
+        existing_entry=read_result.entry,
+        existing_config=None,
+        project=None,
+        mode="Create config",
+    )
 
 
 def render_logged_in(user: User) -> None:

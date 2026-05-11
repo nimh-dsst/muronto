@@ -7,6 +7,7 @@ import streamlit as st
 from labapi import ApiError
 
 from muronto_app.config import (
+    LA_HOME_FOLDER_KEY,
     OPTIONS_KEY,
     OTHER_CHOICE,
     SOURCE_TYPE_OPTIONS_KEY,
@@ -150,56 +151,63 @@ def save_reusable_subject_options(
     st.session_state[CONFIG_PAGE_ID_STATE_KEY] = config_page.id
 
 
-def render_subject_form(notebook: Any, config: dict[str, Any]) -> None:
+def render_subject_form(
+    notebook: Any,
+    config: dict[str, Any],
+    project: dict[str, str],
+) -> None:
     options = normalize_options(config.get(OPTIONS_KEY))
 
-    if st.button("Add strain/genotype", use_container_width=True):
+    if st.button(
+        "Add strain/genotype",
+        help="Add another strain and genotype entry box.",
+        use_container_width=True,
+    ):
         increment_strain_genotype_count()
         st.rerun()
 
-    with st.form("subject_form"):
-        render_text_guidance(
-            "animal_id must match the regex pattern "
-            f"`{ANIMAL_ID_PATTERN_TEXT}`, for example `123-4567`."
-        )
-        animal_id = st.text_input("animal_id")
+    render_text_guidance(
+        "animal_id must match the regex pattern "
+        f"`{ANIMAL_ID_PATTERN_TEXT}`, for example `123-4567`."
+    )
+    animal_id = st.text_input("animal_id")
 
-        render_text_guidance(
-            "ear_tag must match the regex pattern "
-            f"`{EAR_TAG_PATTERN_TEXT}`, for example `123`."
-        )
-        ear_tag = st.text_input("ear_tag")
+    render_text_guidance(
+        "ear_tag must match the regex pattern "
+        f"`{EAR_TAG_PATTERN_TEXT}`, for example `123`."
+    )
+    ear_tag = st.text_input("ear_tag")
 
-        render_text_guidance(
-            "ccn must match the regex pattern "
-            f"`{CCN_PATTERN_TEXT}`, for example `123456`."
-        )
-        ccn = st.text_input("ccn")
+    render_text_guidance(
+        "ccn must match the regex pattern "
+        f"`{CCN_PATTERN_TEXT}`, for example `123456`."
+    )
+    ccn = st.text_input("ccn")
 
-        strain_genotypes = render_strain_genotypes(options)
+    strain_genotypes = render_strain_genotypes(options)
 
-        dob = render_subject_date("dob", "subject_dob")
-        dow = render_subject_date("dow", "subject_dow")
+    dob = render_subject_date("dob", "subject_dob")
+    dow = render_subject_date("dow", "subject_dow")
 
-        source_type = render_select_with_other(
-            label="source_type",
-            options=options,
-            options_key=SOURCE_TYPE_OPTIONS_KEY,
-            widget_key="subject_source_type",
-            other_prompt="New source_type",
-        )
+    source_type = render_select_with_other(
+        label="source_type",
+        options=options,
+        options_key=SOURCE_TYPE_OPTIONS_KEY,
+        widget_key="subject_source_type",
+        other_prompt="New source_type",
+    )
 
-        render_text_guidance(
-            "parent_ccn must match the regex pattern "
-            f"`{CCN_PATTERN_TEXT}`, for example `123456`."
-        )
-        parent_ccn = st.text_input("parent_ccn")
+    render_text_guidance(
+        "parent_ccn must match the regex pattern "
+        f"`{CCN_PATTERN_TEXT}`, for example `123456`."
+    )
+    parent_ccn = st.text_input("parent_ccn")
 
-        submitted = st.form_submit_button(
-            "Create subject page",
-            type="primary",
-            use_container_width=True,
-        )
+    submitted = st.button(
+        "Create subject page",
+        type="primary",
+        use_container_width=True,
+    )
 
     if not submitted:
         return
@@ -224,7 +232,7 @@ def render_subject_form(notebook: Any, config: dict[str, Any]) -> None:
     try:
         home_folder = resolve_notebook_folder(
             notebook,
-            config["LA_Home_Folder"],
+            project[LA_HOME_FOLDER_KEY],
         )
         result = create_subject_page_with_json(home_folder, payload)
     except ApiError as exc:
@@ -252,18 +260,19 @@ def render_subject_form(notebook: Any, config: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    if not render_project_context("Subject"):
+    context = render_project_context("Subject")
+    if context is None:
         return
 
     notebook = st.session_state.get(SELECTED_NOTEBOOK_STATE_KEY)
-    config = st.session_state.get(CONFIG_STATE_KEY)
+    _user, config, project = context
     if notebook is None or not isinstance(config, dict):
         st.warning("Select a notebook and complete muronto_config first.")
         st.page_link("Project.py", label="Open Project")
         return
 
     st.subheader("Subject")
-    render_subject_form(notebook, config)
+    render_subject_form(notebook, config, project)
 
 
 if __name__ == "__main__":
