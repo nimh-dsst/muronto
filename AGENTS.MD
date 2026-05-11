@@ -13,6 +13,15 @@
 - Certificate verification should use the `certifi` CA bundle.
 - If code needs an explicit CA bundle path, use `certifi.where()`.
 
+## LabArchives API
+
+- This application uses the `labapi` package from PyPI for LabArchives access.
+- `labapi` documentation is hosted at https://nimh-dsst.github.io/labapi/v1.0.3/index.html.
+- Assume API credentials are provided through environment variables.
+- Do not add or require a `.env` file for LabArchives credentials.
+- Assume users log into LabArchives directly.
+- Do not require users to provide an email address, username, or auth token in the application.
+
 ## Testing
 
 - Tests use `pytest`.
