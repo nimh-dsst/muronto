@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
@@ -21,7 +22,13 @@ from muronto_app.config import (
     CONFIG_FILENAME,
     CONFIG_PAGE_NAME,
     ConfigValidationError,
+    clean_string,
     normalize_config,
+)
+from muronto_app.subject import (
+    ANIMAL_ID_KEY,
+    SUBJECT_ATTACHMENT_CAPTION,
+    subject_json_filename,
 )
 
 
@@ -32,6 +39,14 @@ class ConfigReadResult:
     entry: Any | None
     config: dict[str, Any] | None
     errors: list[str]
+
+
+@dataclass(frozen=True)
+class SubjectWriteResult:
+    """Result of writing a subject page and JSON attachment."""
+
+    page: Any
+    attachment_entry: Any
 
 
 def find_root_config_page(notebook: Any) -> Any | None:
@@ -141,6 +156,61 @@ def save_config_attachment(
         caption=CONFIG_CAPTION,
     )
     return attachment_entry
+
+
+def resolve_notebook_folder(notebook: Any, folder_path: str) -> Any:
+    """Return the folder-like notebook node for an absolute folder path."""
+    cleaned_path = clean_string(folder_path)
+    if not cleaned_path or cleaned_path == "/":
+        return notebook
+
+    node = notebook.traverse(cleaned_path)
+    if not node.is_dir():
+        raise ValueError(
+            f"LabArchives home folder `{cleaned_path}` is not a folder."
+        )
+    return node.as_dir()
+
+
+def child_named(container: Any, name: str) -> Any | None:
+    """Return the first direct child with an exact display-name match."""
+    for child in container.children:
+        if child.name == name:
+            return child
+    return None
+
+
+def create_subject_page_with_json(
+    container: Any,
+    subject_payload: Mapping[str, Any],
+) -> SubjectWriteResult:
+    """Create a subject page and attach the flat subject JSON payload."""
+    animal_id = clean_string(subject_payload.get(ANIMAL_ID_KEY))
+    if not animal_id:
+        raise ValueError("animal_id is required.")
+
+    container.refresh()
+    if child_named(container, animal_id) is not None:
+        raise ValueError(
+            f"A LabArchives item named `{animal_id}` already exists in the "
+            "selected home folder."
+        )
+
+    try:
+        page = container.create(NotebookPage, animal_id)
+    except NodeExistsError:
+        raise ValueError(
+            f"A LabArchives item named `{animal_id}` already exists in the "
+            "selected home folder."
+        ) from None
+
+    attachment_entry, _text_entry = page.entries.create_json_entry(
+        dict(subject_payload),
+        filename=subject_json_filename(animal_id),
+        caption=SUBJECT_ATTACHMENT_CAPTION,
+    )
+    container.refresh()
+    return SubjectWriteResult(page, attachment_entry)
 
 
 def sorted_directories(container: Any) -> list[Any]:

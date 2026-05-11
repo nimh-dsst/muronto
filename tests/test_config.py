@@ -5,6 +5,7 @@ import pytest
 from muronto_app.config import (
     ASP_KEY,
     DEFAULT_OPTIONS,
+    DEFAULT_STRAIN_OPTIONS,
     DEFAULT_VALUES,
     EMAIL_TO_INVESTIGATOR_KEY,
     INVESTIGATOR_KEY,
@@ -13,7 +14,9 @@ from muronto_app.config import (
     PI_KEY,
     PROJECT_ID_KEY,
     PROJECT_NAME_KEY,
+    SOURCE_TYPE_OPTIONS_KEY,
     SPECIES_KEY,
+    STRAIN_OPTIONS_KEY,
     ConfigValidationError,
     build_config,
     normalize_config,
@@ -78,6 +81,41 @@ def test_normalize_config_accepts_complete_payload() -> None:
     assert config[OPTIONS_KEY][LA_HOME_FOLDER_KEY] == ["/Experiments"]
 
 
+def test_normalize_config_injects_subject_option_defaults() -> None:
+    options_without_subject = {
+        key: value
+        for key, value in DEFAULT_OPTIONS.items()
+        if key not in {STRAIN_OPTIONS_KEY, SOURCE_TYPE_OPTIONS_KEY}
+    }
+    payload = {
+        **valid_values(),
+        EMAIL_TO_INVESTIGATOR_KEY: {},
+        OPTIONS_KEY: options_without_subject,
+    }
+
+    config = normalize_config(payload)
+
+    assert config[OPTIONS_KEY][STRAIN_OPTIONS_KEY] == DEFAULT_STRAIN_OPTIONS
+    assert config[OPTIONS_KEY][SOURCE_TYPE_OPTIONS_KEY] == ["Breeding", "JAX"]
+
+
+def test_normalize_config_preserves_custom_subject_options() -> None:
+    payload = {
+        **valid_values(),
+        EMAIL_TO_INVESTIGATOR_KEY: {},
+        OPTIONS_KEY: {
+            **DEFAULT_OPTIONS,
+            STRAIN_OPTIONS_KEY: ["Custom-Strain"],
+            SOURCE_TYPE_OPTIONS_KEY: ["Custom-Source"],
+        },
+    }
+
+    config = normalize_config(payload)
+
+    assert "Custom-Strain" in config[OPTIONS_KEY][STRAIN_OPTIONS_KEY]
+    assert "Custom-Source" in config[OPTIONS_KEY][SOURCE_TYPE_OPTIONS_KEY]
+
+
 def test_validate_config_rejects_partial_payload() -> None:
     payload = {
         PROJECT_ID_KEY: "SEASIC",
@@ -106,3 +144,15 @@ def test_validate_config_rejects_malformed_options() -> None:
     errors = validate_config_payload(payload)
 
     assert errors == ["options.Species must contain only strings."]
+
+
+def test_validate_config_rejects_malformed_subject_options() -> None:
+    payload = {
+        **valid_values(),
+        EMAIL_TO_INVESTIGATOR_KEY: {},
+        OPTIONS_KEY: {**DEFAULT_OPTIONS, STRAIN_OPTIONS_KEY: ["Ai14", 12]},
+    }
+
+    errors = validate_config_payload(payload)
+
+    assert errors == ["options.strain must contain only strings."]

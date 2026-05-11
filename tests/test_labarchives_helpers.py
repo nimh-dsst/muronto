@@ -15,11 +15,14 @@ from muronto_app.config import (
 )
 from muronto_app.labarchives import (
     attachment_matches_config,
+    create_subject_page_with_json,
     find_config_attachment,
     find_root_config_page,
     read_config_attachment,
+    resolve_notebook_folder,
     save_config_attachment,
 )
+from muronto_app.subject import SUBJECT_ATTACHMENT_CAPTION
 
 
 class FakeAttachment:
@@ -95,10 +98,15 @@ class FakeEntries(list[FakeEntry]):
 
 
 class FakePage:
-    def __init__(self, entries: list[FakeEntry]) -> None:
+    def __init__(
+        self,
+        entries: list[FakeEntry],
+        *,
+        name: str = CONFIG_PAGE_NAME,
+    ) -> None:
         self.id = "page-id"
         self.entries = FakeEntries(entries)
-        self.name = CONFIG_PAGE_NAME
+        self.name = name
 
     def is_dir(self) -> bool:
         return False
@@ -108,15 +116,39 @@ class FakePage:
 
 
 class FakeDirectory:
-    name = "Folder"
+    def __init__(self, *, name: str = "Folder") -> None:
+        self.name = name
 
     def is_dir(self) -> bool:
         return True
+
+    def as_dir(self) -> "FakeDirectory":
+        return self
 
 
 class FakeNotebook:
     def __init__(self, children: list[Any]) -> None:
         self.children = children
+
+    def traverse(self, path: str) -> Any:
+        for child in self.children:
+            if f"/{child.name}" == path or child.name == path:
+                return child
+        raise KeyError(path)
+
+
+class FakeSubjectContainer:
+    def __init__(self, children: list[Any] | None = None) -> None:
+        self.children = children or []
+        self.refreshed = 0
+
+    def refresh(self) -> None:
+        self.refreshed += 1
+
+    def create(self, _cls: Any, name: str) -> FakePage:
+        page = FakePage([], name=name)
+        self.children.append(page)
+        return page
 
 
 def config_payload() -> dict[str, Any]:
@@ -197,3 +229,51 @@ def test_save_config_attachment_creates_when_missing() -> None:
     assert saved is page.entries[-1]
     assert page.entries.created is not None
     assert page.entries.created[1:] == (CONFIG_FILENAME, CONFIG_CAPTION)
+
+
+def test_resolve_notebook_folder_returns_configured_folder() -> None:
+    folder = FakeDirectory(name="Experiments")
+    notebook = FakeNotebook([folder])
+
+    assert resolve_notebook_folder(notebook, "/Experiments") is folder
+
+
+def test_create_subject_page_with_json_blocks_duplicate_child_name() -> None:
+    existing_page = FakePage([], name="123-4567")
+    container = FakeSubjectContainer([existing_page])
+
+    try:
+        create_subject_page_with_json(
+            container,
+            {"animal_id": "123-4567"},
+        )
+    except ValueError as exc:
+        assert "already exists" in str(exc)
+    else:
+        raise AssertionError("Expected duplicate subject page to be rejected.")
+
+
+def test_create_subject_page_with_json_creates_page_and_attachment() -> None:
+    container = FakeSubjectContainer()
+    payload = {
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "ccn": "123456",
+        "strain_1": "Ai14",
+        "genotype_1": "Het",
+        "dob": "20240102",
+        "dow": "20240109",
+        "source_type": "JAX",
+        "parent_ccn": "",
+    }
+
+    result = create_subject_page_with_json(container, payload)
+
+    assert result.page.name == "123-4567"
+    assert result.attachment_entry is result.page.entries[-1]
+    assert result.page.entries.created == (
+        payload,
+        "123-4567.json",
+        SUBJECT_ATTACHMENT_CAPTION,
+    )
+    assert container.refreshed == 2

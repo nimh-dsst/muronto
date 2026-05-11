@@ -20,6 +20,8 @@ SPECIES_KEY: Final[str] = "Species"
 ASP_KEY: Final[str] = "ASP"
 EMAIL_TO_INVESTIGATOR_KEY: Final[str] = "email_to_investigator"
 OPTIONS_KEY: Final[str] = "options"
+STRAIN_OPTIONS_KEY: Final[str] = "strain"
+SOURCE_TYPE_OPTIONS_KEY: Final[str] = "source_type"
 
 CONFIG_VALUE_KEYS: Final[tuple[str, ...]] = (
     PROJECT_ID_KEY,
@@ -39,6 +41,16 @@ SELECTABLE_VALUE_KEYS: Final[tuple[str, ...]] = (
     ASP_KEY,
 )
 
+SUBJECT_OPTION_KEYS: Final[tuple[str, ...]] = (
+    STRAIN_OPTIONS_KEY,
+    SOURCE_TYPE_OPTIONS_KEY,
+)
+
+OPTION_KEYS: Final[tuple[str, ...]] = (
+    *CONFIG_VALUE_KEYS,
+    *SUBJECT_OPTION_KEYS,
+)
+
 DEFAULT_VALUES: Final[dict[str, str]] = {
     PROJECT_ID_KEY: "SEASIC",
     PROJECT_NAME_KEY: (
@@ -51,6 +63,42 @@ DEFAULT_VALUES: Final[dict[str, str]] = {
     ASP_KEY: "UFNC-01",
 }
 
+DEFAULT_STRAIN_OPTIONS: Final[list[str]] = [
+    "N/A",
+    "5HT3-eGFP",
+    "Ai14",
+    "Ai3",
+    "Ai32",
+    "Ai9",
+    "Ai95",
+    "Ai96",
+    "C57BL/6J",
+    "CaMKII-GCaMP6s",
+    "DBH",
+    "Drd1a-Cre",
+    "Emx1-Cre",
+    "GINGFP",
+    "GPR26-Cre",
+    "Grp-Cre",
+    "LSL-TVA",
+    "NP39-Cre",
+    "Ntsr1-Cre",
+    "PCP2-Cre",
+    "PV-Cre",
+    "Rbp4-Cre",
+    "RCE-FRT",
+    "ROSA-eGFP",
+    "Sim1-Cre",
+    "Vglut1-Cre",
+    "SST-Cre",
+    "SST-Flpo",
+    "SynGAP1",
+    "TH-Cre",
+    "Tlx3-Cre",
+    "VIP-Cre",
+    "VIP-Flpo",
+]
+
 DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
     PROJECT_ID_KEY: ["SEASIC"],
     PROJECT_NAME_KEY: [
@@ -61,6 +109,8 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
     PI_KEY: ["Soohyun Lee"],
     SPECIES_KEY: ["Mouse", "Marmoset"],
     ASP_KEY: ["UFNC-01"],
+    STRAIN_OPTIONS_KEY: DEFAULT_STRAIN_OPTIONS,
+    SOURCE_TYPE_OPTIONS_KEY: ["Breeding", "JAX"],
 }
 
 
@@ -109,7 +159,7 @@ def normalize_options(
     if not isinstance(raw_options, Mapping):
         return options
 
-    for key in CONFIG_VALUE_KEYS:
+    for key in OPTION_KEYS:
         raw_value = raw_options.get(key, [])
         if isinstance(raw_value, list):
             for value in unique_strings(raw_value):
@@ -167,6 +217,14 @@ def validate_config_payload(data: object) -> list[str]:
             elif not isinstance(raw_options[key], list):
                 errors.append(f"options.{key} must be a list.")
             elif any(not clean_string(value) for value in raw_options[key]):
+                errors.append(f"options.{key} must contain only strings.")
+
+        for key in SUBJECT_OPTION_KEYS:
+            if key in raw_options and not isinstance(raw_options[key], list):
+                errors.append(f"options.{key} must be a list.")
+            elif key in raw_options and any(
+                not clean_string(value) for value in raw_options[key]
+            ):
                 errors.append(f"options.{key} must contain only strings.")
 
     return errors
