@@ -27,8 +27,14 @@ from muronto_app.config import (
 )
 from muronto_app.subject import (
     ANIMAL_ID_KEY,
+    EAR_TAG_KEY,
     SUBJECT_ATTACHMENT_CAPTION,
     subject_json_filename,
+)
+from muronto_app.surgery import (
+    SURGERY_ATTACHMENT_CAPTION,
+    SURGERY_DATE_KEY,
+    surgery_json_filename,
 )
 
 
@@ -47,6 +53,23 @@ class SubjectWriteResult:
 
     page: Any
     attachment_entry: Any
+
+
+@dataclass(frozen=True)
+class SubjectRecord:
+    """A subject JSON payload paired with its LabArchives page."""
+
+    page: Any
+    payload: dict[str, str]
+
+
+@dataclass(frozen=True)
+class SurgeryWriteResult:
+    """Result of writing a surgery JSON attachment."""
+
+    page: Any
+    attachment_entry: Any
+    created: bool
 
 
 def find_root_config_page(notebook: Any) -> Any | None:
@@ -75,6 +98,35 @@ def _close_attachment(attachment: object) -> None:
         close()
 
 
+def _read_json_attachment(entry: Any) -> object:
+    attachment = entry.get_attachment()
+    try:
+        raw_payload = attachment.read()
+    finally:
+        _close_attachment(attachment)
+
+    return json.loads(raw_payload.decode("utf-8"))
+
+
+def _json_attachment_content(
+    payload: Mapping[str, Any],
+    *,
+    filename: str,
+    caption: str,
+) -> Attachment:
+    raw_payload = json.dumps(
+        dict(payload),
+        indent=2,
+        sort_keys=True,
+    ).encode("utf-8")
+    return Attachment(
+        BytesIO(raw_payload),
+        "application/json",
+        filename,
+        caption,
+    )
+
+
 def attachment_matches_config(entry: object) -> bool:
     """Return whether an attachment entry looks like ``muronto_config``."""
     if getattr(entry, "caption", None) == CONFIG_CAPTION:
@@ -89,6 +141,48 @@ def attachment_matches_config(entry: object) -> bool:
         filename = getattr(attachment, "filename", "")
         caption = getattr(attachment, "caption", "")
         return filename == CONFIG_FILENAME or caption == CONFIG_CAPTION
+    finally:
+        _close_attachment(attachment)
+
+
+def attachment_matches_caption(entry: object, caption: str) -> bool:
+    """Return whether an attachment entry has the expected caption."""
+    if getattr(entry, "caption", None) == caption:
+        return True
+
+    get_attachment = getattr(entry, "get_attachment", None)
+    if not callable(get_attachment):
+        return False
+
+    attachment = get_attachment()
+    try:
+        return getattr(attachment, "caption", "") == caption
+    finally:
+        _close_attachment(attachment)
+
+
+def attachment_matches_filename_and_caption(
+    entry: object,
+    *,
+    filename: str,
+    caption: str,
+) -> bool:
+    """Return whether an attachment entry matches a filename and caption."""
+    entry_filename = getattr(entry, "filename", "")
+    entry_caption = getattr(entry, "caption", "")
+    if entry_filename == filename and entry_caption == caption:
+        return True
+
+    get_attachment = getattr(entry, "get_attachment", None)
+    if not callable(get_attachment):
+        return False
+
+    attachment = get_attachment()
+    try:
+        return (
+            getattr(attachment, "filename", "") == filename
+            and getattr(attachment, "caption", "") == caption
+        )
     finally:
         _close_attachment(attachment)
 
@@ -112,13 +206,7 @@ def read_config_attachment(page: Any) -> ConfigReadResult:
         )
 
     try:
-        attachment = entry.get_attachment()
-        try:
-            raw_payload = attachment.read()
-        finally:
-            _close_attachment(attachment)
-
-        decoded = json.loads(raw_payload.decode("utf-8"))
+        decoded = _read_json_attachment(entry)
         config = normalize_config(decoded)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         return ConfigReadResult(
@@ -139,14 +227,11 @@ def save_config_attachment(
     existing_entry: Any | None = None,
 ) -> Any:
     """Create or update the config JSON attachment entry."""
-    payload = json.dumps(config, indent=2, sort_keys=True).encode("utf-8")
-
     if existing_entry is not None:
-        existing_entry.content = Attachment(
-            BytesIO(payload),
-            "application/json",
-            CONFIG_FILENAME,
-            CONFIG_CAPTION,
+        existing_entry.content = _json_attachment_content(
+            config,
+            filename=CONFIG_FILENAME,
+            caption=CONFIG_CAPTION,
         )
         return existing_entry
 
@@ -211,6 +296,119 @@ def create_subject_page_with_json(
     )
     container.refresh()
     return SubjectWriteResult(page, attachment_entry)
+
+
+def find_subject_attachment(page: Any) -> Any | None:
+    """Return the subject JSON attachment entry from a page when present."""
+    for entry in page.entries:
+        if is_attachment_entry(entry) and attachment_matches_caption(
+            entry,
+            SUBJECT_ATTACHMENT_CAPTION,
+        ):
+            return entry
+    return None
+
+
+def read_subject_attachment(page: Any) -> dict[str, str] | None:
+    """Read a page's subject JSON attachment when it is valid enough for UI."""
+    entry = find_subject_attachment(page)
+    if entry is None:
+        return None
+
+    try:
+        decoded = _read_json_attachment(entry)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(decoded, Mapping):
+        return None
+
+    payload = {
+        clean_string(key): clean_string(value)
+        for key, value in decoded.items()
+        if clean_string(key)
+    }
+    if not payload.get(ANIMAL_ID_KEY):
+        return None
+    return payload
+
+
+def discover_subject_records(container: Any) -> list[SubjectRecord]:
+    """Recursively return subject records below a folder-like container."""
+    refresh = getattr(container, "refresh", None)
+    if callable(refresh):
+        refresh()
+
+    records: list[SubjectRecord] = []
+    for child in container.children:
+        if child.is_dir():
+            records.extend(discover_subject_records(child.as_dir()))
+            continue
+
+        page = child.as_page()
+        payload = read_subject_attachment(page)
+        if payload is not None:
+            records.append(SubjectRecord(page=page, payload=payload))
+
+    return sorted(
+        records,
+        key=lambda record: (
+            record.payload.get(ANIMAL_ID_KEY, "").lower(),
+            record.payload.get(EAR_TAG_KEY, "").lower(),
+        ),
+    )
+
+
+def find_surgery_attachment(page: Any, filename: str) -> Any | None:
+    """Return an existing surgery JSON attachment by filename."""
+    for entry in page.entries:
+        if not is_attachment_entry(entry):
+            continue
+        if attachment_matches_filename_and_caption(
+            entry,
+            filename=filename,
+            caption=SURGERY_ATTACHMENT_CAPTION,
+        ):
+            return entry
+    return None
+
+
+def save_surgery_attachment(
+    page: Any,
+    surgery_payload: Mapping[str, Any],
+) -> SurgeryWriteResult:
+    """Create or update a surgery JSON attachment on a subject page."""
+    animal_id = clean_string(surgery_payload.get(ANIMAL_ID_KEY))
+    surgery_date = clean_string(surgery_payload.get(SURGERY_DATE_KEY))
+    if not animal_id:
+        raise ValueError("animal_id is required.")
+    if not surgery_date:
+        raise ValueError("surgery_date is required.")
+
+    filename = surgery_json_filename(animal_id, surgery_date)
+    existing_entry = find_surgery_attachment(page, filename)
+    if existing_entry is not None:
+        existing_entry.content = _json_attachment_content(
+            surgery_payload,
+            filename=filename,
+            caption=SURGERY_ATTACHMENT_CAPTION,
+        )
+        return SurgeryWriteResult(
+            page=page,
+            attachment_entry=existing_entry,
+            created=False,
+        )
+
+    attachment_entry, _text_entry = page.entries.create_json_entry(
+        dict(surgery_payload),
+        filename=filename,
+        caption=SURGERY_ATTACHMENT_CAPTION,
+    )
+    return SurgeryWriteResult(
+        page=page,
+        attachment_entry=attachment_entry,
+        created=True,
+    )
 
 
 def sorted_directories(container: Any) -> list[Any]:

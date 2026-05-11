@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from muronto_app.config import (
@@ -20,6 +22,7 @@ from muronto_app.config import (
     SOURCE_TYPE_OPTIONS_KEY,
     SPECIES_KEY,
     STRAIN_OPTIONS_KEY,
+    SURGEON_OPTIONS_KEY,
     ConfigValidationError,
     active_project,
     normalize_config,
@@ -168,6 +171,37 @@ def test_validate_config_rejects_malformed_options() -> None:
     errors = validate_config_payload(payload)
 
     assert errors == ["options.Species must contain only strings."]
+
+
+def test_normalize_config_adds_missing_surgeon_options() -> None:
+    payload = valid_payload()
+    options = cast(dict[str, object], payload[OPTIONS_KEY])
+    del options[SURGEON_OPTIONS_KEY]
+
+    errors = validate_config_payload(payload)
+    config = normalize_config(payload)
+
+    assert errors == []
+    assert config[OPTIONS_KEY][SURGEON_OPTIONS_KEY] == [
+        "APF",
+        "CY",
+        "DK",
+        "EP",
+        "LZ",
+        "MH",
+        "SB",
+        "SL",
+    ]
+
+
+def test_validate_config_rejects_malformed_surgeon_options() -> None:
+    payload = valid_payload()
+    options = cast(dict[str, object], payload[OPTIONS_KEY])
+    options[SURGEON_OPTIONS_KEY] = "APF"
+
+    errors = validate_config_payload(payload)
+
+    assert errors == ["options.Surgeon must be a list."]
 
 
 def test_upsert_project_config_creates_initial_config_and_mappings() -> None:

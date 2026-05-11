@@ -26,13 +26,20 @@ from muronto_app.config import (
 from muronto_app.labarchives import (
     attachment_matches_config,
     create_subject_page_with_json,
+    discover_subject_records,
     find_config_attachment,
     find_root_config_page,
     read_config_attachment,
     resolve_notebook_folder,
     save_config_attachment,
+    save_surgery_attachment,
 )
-from muronto_app.subject import SUBJECT_ATTACHMENT_CAPTION
+from muronto_app.subject import (
+    ANIMAL_ID_KEY,
+    EAR_TAG_KEY,
+    SUBJECT_ATTACHMENT_CAPTION,
+)
+from muronto_app.surgery import SURGERY_ATTACHMENT_CAPTION
 
 
 class FakeAttachment:
@@ -126,14 +133,25 @@ class FakePage:
 
 
 class FakeDirectory:
-    def __init__(self, *, name: str = "Folder") -> None:
+    def __init__(
+        self,
+        *,
+        name: str = "Folder",
+        children: list[Any] | None = None,
+    ) -> None:
         self.name = name
+        self.id = name
+        self.children = children or []
+        self.refreshed = 0
 
     def is_dir(self) -> bool:
         return True
 
     def as_dir(self) -> "FakeDirectory":
         return self
+
+    def refresh(self) -> None:
+        self.refreshed += 1
 
 
 class FakeNotebook:
@@ -298,3 +316,78 @@ def test_create_subject_page_with_json_creates_page_and_attachment() -> None:
         SUBJECT_ATTACHMENT_CAPTION,
     )
     assert container.refreshed == 2
+
+
+def test_discover_subject_records_recurses_folders() -> None:
+    subject_payload = {
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "ccn": "123456",
+        "sex": "M",
+        "strain_1": "Ai14",
+        "genotype_1": "Het",
+        "dob": "20240102",
+        "dow": "20240109",
+        "source_type": "JAX",
+        "parent_ccn": "",
+    }
+    subject_page = FakePage(
+        [
+            FakeEntry(
+                subject_payload,
+                filename="123-4567.json",
+                caption=SUBJECT_ATTACHMENT_CAPTION,
+            )
+        ],
+        name="123-4567",
+    )
+    nested_folder = FakeDirectory(name="Nested", children=[subject_page])
+    root_folder = FakeDirectory(name="Root", children=[nested_folder])
+
+    records = discover_subject_records(root_folder)
+
+    assert len(records) == 1
+    assert records[0].page is subject_page
+    assert records[0].payload[ANIMAL_ID_KEY] == "123-4567"
+    assert records[0].payload[EAR_TAG_KEY] == "123"
+    assert root_folder.refreshed == 1
+    assert nested_folder.refreshed == 1
+
+
+def test_save_surgery_attachment_creates_and_updates_by_filename() -> None:
+    page = FakePage([], name="123-4567")
+    payload = {
+        "project_id": "SEASIC",
+        "investigator": "APF",
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "surgeon": "SL",
+        "surgery_date": "20260511",
+        "preop_cnn": "123456",
+        "postop_cnn": "654321",
+    }
+
+    created = save_surgery_attachment(page, payload)
+
+    assert created.created
+    assert created.attachment_entry is page.entries[-1]
+    assert page.entries.created == (
+        payload,
+        "123-4567_surgery_20260511.json",
+        SURGERY_ATTACHMENT_CAPTION,
+    )
+
+    updated_payload = {**payload, "surgeon": "JGL"}
+    updated = save_surgery_attachment(page, updated_payload)
+
+    assert not updated.created
+    assert updated.attachment_entry is created.attachment_entry
+    assert len(page.entries) == 1
+    assert page.entries[0].updated_content is not None
+    assert (
+        page.entries[0].updated_content.filename
+        == "123-4567_surgery_20260511.json"
+    )
+    assert (
+        page.entries[0].updated_content.caption == SURGERY_ATTACHMENT_CAPTION
+    )

@@ -27,6 +27,7 @@ EMAIL_TO_PROJECT_KEY: Final[str] = "email_to_project"
 OPTIONS_KEY: Final[str] = "options"
 STRAIN_OPTIONS_KEY: Final[str] = "strain"
 SOURCE_TYPE_OPTIONS_KEY: Final[str] = "source_type"
+SURGEON_OPTIONS_KEY: Final[str] = "Surgeon"
 
 PROJECT_VALUE_KEYS: Final[tuple[str, ...]] = (
     PROJECT_ID_KEY,
@@ -49,10 +50,20 @@ SUBJECT_OPTION_KEYS: Final[tuple[str, ...]] = (
     SOURCE_TYPE_OPTIONS_KEY,
 )
 
+SURGERY_OPTION_KEYS: Final[tuple[str, ...]] = (SURGEON_OPTIONS_KEY,)
+
 OPTION_KEYS: Final[tuple[str, ...]] = (
     *OPTION_VALUE_KEYS,
     *SUBJECT_OPTION_KEYS,
+    *SURGERY_OPTION_KEYS,
 )
+
+REQUIRED_OPTION_KEYS: Final[tuple[str, ...]] = (
+    *OPTION_VALUE_KEYS,
+    *SUBJECT_OPTION_KEYS,
+)
+
+OPTIONAL_OPTION_KEYS: Final[tuple[str, ...]] = SURGERY_OPTION_KEYS
 
 DEFAULT_VALUES: Final[dict[str, str]] = {
     PROJECT_ID_KEY: "SEASIC",
@@ -109,6 +120,7 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
     ASP_KEY: ["UFNC-01"],
     STRAIN_OPTIONS_KEY: DEFAULT_STRAIN_OPTIONS,
     SOURCE_TYPE_OPTIONS_KEY: ["Breeding", "JAX"],
+    SURGEON_OPTIONS_KEY: ["APF", "CY", "DK", "EP", "LZ", "MH", "SB", "SL"],
 }
 
 
@@ -208,13 +220,26 @@ def _validate_options(raw_options: object, errors: list[str]) -> None:
         errors.append("options must be an object.")
         return
 
-    for key in OPTION_KEYS:
+    for key in REQUIRED_OPTION_KEYS:
         if key not in raw_options:
             errors.append(f"Missing required options key: {key}.")
-        elif not isinstance(raw_options[key], list):
-            errors.append(f"options.{key} must be a list.")
-        elif any(not clean_string(value) for value in raw_options[key]):
-            errors.append(f"options.{key} must contain only strings.")
+            continue
+        _validate_option_list(raw_options[key], key, errors)
+
+    for key in OPTIONAL_OPTION_KEYS:
+        if key in raw_options:
+            _validate_option_list(raw_options[key], key, errors)
+
+
+def _validate_option_list(
+    raw_value: object,
+    key: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(raw_value, list):
+        errors.append(f"options.{key} must be a list.")
+    elif any(not clean_string(value) for value in raw_value):
+        errors.append(f"options.{key} must contain only strings.")
 
 
 def _validate_projects(raw_projects: object, errors: list[str]) -> set[str]:
