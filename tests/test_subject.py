@@ -22,6 +22,7 @@ def test_build_subject_payload_formats_dates_and_suffixes_pairs() -> None:
         animal_id="123-4567",
         ear_tag="123",
         ccn="123456",
+        sex="M",
         strain_genotypes=[("Ai14", "Het"), ("Custom-Strain", "Tg")],
         dob=date(2024, 1, 2),
         dow=date(2024, 1, 9),
@@ -30,6 +31,7 @@ def test_build_subject_payload_formats_dates_and_suffixes_pairs() -> None:
     )
 
     assert payload["animal_id"] == "123-4567"
+    assert payload["sex"] == "M"
     assert payload["strain_1"] == "Ai14"
     assert payload["genotype_1"] == "Het"
     assert payload["strain_2"] == "Custom-Strain"
@@ -45,6 +47,7 @@ def test_build_subject_payload_requires_breeding_parent_ccn() -> None:
             animal_id="123-4567",
             ear_tag="123",
             ccn="123456",
+            sex="F",
             strain_genotypes=[("Ai14", "Het")],
             dob=date(2024, 1, 2),
             dow=date(2024, 1, 9),
@@ -60,6 +63,7 @@ def test_build_subject_payload_allows_blank_parent_for_jax() -> None:
         animal_id="123-4567",
         ear_tag="123",
         ccn="123456",
+        sex="F",
         strain_genotypes=[("Ai14", "Het")],
         dob=date(2024, 1, 2),
         dow=date(2024, 1, 9),
@@ -77,6 +81,7 @@ def test_build_subject_payload_validates_optional_parent_ccn() -> None:
             animal_id="123-4567",
             ear_tag="123",
             ccn="123456",
+            sex="M",
             strain_genotypes=[("Ai14", "Het")],
             dob=date(2024, 1, 2),
             dow=date(2024, 1, 9),
@@ -95,6 +100,7 @@ def test_build_subject_payload_validates_identity_patterns() -> None:
             animal_id="1234567",
             ear_tag="12",
             ccn="12345",
+            sex="M",
             strain_genotypes=[("Ai14", "Het")],
             dob=date(2024, 1, 2),
             dow=date(2024, 1, 9),
@@ -109,6 +115,23 @@ def test_build_subject_payload_validates_identity_patterns() -> None:
         "ear_tag must match" in error for error in exc_info.value.errors
     )
     assert any("ccn must match" in error for error in exc_info.value.errors)
+
+
+def test_build_subject_payload_validates_sex_options() -> None:
+    with pytest.raises(SubjectValidationError) as exc_info:
+        build_subject_payload(
+            animal_id="123-4567",
+            ear_tag="123",
+            ccn="123456",
+            sex="U",
+            strain_genotypes=[("Ai14", "Het")],
+            dob=date(2024, 1, 2),
+            dow=date(2024, 1, 9),
+            source_type="JAX",
+            parent_ccn="",
+        )
+
+    assert "sex must be one of M, F." in exc_info.value.errors
 
 
 def test_with_subject_options_persists_custom_subject_values() -> None:

@@ -35,6 +35,7 @@ from muronto_app.subject import (
     CCN_PATTERN_TEXT,
     EAR_TAG_PATTERN_TEXT,
     GENOTYPE_OPTIONS,
+    SEX_OPTIONS,
     SubjectValidationError,
     build_subject_payload,
     format_subject_date,
@@ -184,6 +185,8 @@ def render_subject_form(
     )
     ccn = st.text_input("ccn")
 
+    sex = st.selectbox("sex", options=SEX_OPTIONS, key="subject_sex")
+
     strain_genotypes = render_strain_genotypes(options)
 
     dob = render_subject_date("dob", "subject_dob")
@@ -217,6 +220,7 @@ def render_subject_form(
             animal_id=animal_id,
             ear_tag=ear_tag,
             ccn=ccn,
+            sex=sex,
             strain_genotypes=strain_genotypes,
             dob=dob,
             dow=dow,

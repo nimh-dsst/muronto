@@ -20,6 +20,7 @@ from muronto_app.config import (
 ANIMAL_ID_KEY: Final[str] = "animal_id"
 EAR_TAG_KEY: Final[str] = "ear_tag"
 CCN_KEY: Final[str] = "ccn"
+SEX_KEY: Final[str] = "sex"
 GENOTYPE_KEY: Final[str] = "genotype"
 DOB_KEY: Final[str] = "dob"
 DOW_KEY: Final[str] = "dow"
@@ -41,6 +42,7 @@ EAR_TAG_PATTERN: Final[re.Pattern[str]] = re.compile(
 CCN_PATTERN: Final[re.Pattern[str]] = re.compile(rf"^{CCN_PATTERN_TEXT}$")
 
 GENOTYPE_OPTIONS: Final[tuple[str, ...]] = ("WT", "Het", "Homo", "Tg")
+SEX_OPTIONS: Final[tuple[str, ...]] = ("M", "F")
 PARENT_REQUIRED_SOURCE_TYPE: Final[str] = "Breeding"
 
 
@@ -116,6 +118,7 @@ def build_subject_payload(
     animal_id: str,
     ear_tag: str,
     ccn: str,
+    sex: str,
     strain_genotypes: Sequence[tuple[str, str]],
     dob: date | None,
     dow: date | None,
@@ -126,6 +129,7 @@ def build_subject_payload(
     cleaned_animal_id = clean_string(animal_id)
     cleaned_ear_tag = clean_string(ear_tag)
     cleaned_ccn = clean_string(ccn)
+    cleaned_sex = clean_string(sex)
     cleaned_source_type = clean_string(source_type)
     cleaned_parent_ccn = clean_string(parent_ccn)
     errors: list[str] = []
@@ -154,6 +158,13 @@ def build_subject_payload(
         example="123456",
         errors=errors,
     )
+
+    if not cleaned_sex:
+        errors.append(f"{SEX_KEY} is required.")
+    elif cleaned_sex not in SEX_OPTIONS:
+        errors.append(
+            f"{SEX_KEY} must be one of " + ", ".join(SEX_OPTIONS) + "."
+        )
 
     if not cleaned_source_type:
         errors.append(f"{SOURCE_TYPE_KEY} is required.")
@@ -205,6 +216,7 @@ def build_subject_payload(
         ANIMAL_ID_KEY: cleaned_animal_id,
         EAR_TAG_KEY: cleaned_ear_tag,
         CCN_KEY: cleaned_ccn,
+        SEX_KEY: cleaned_sex,
     }
     for index, (strain, genotype) in enumerate(cleaned_pairs, start=1):
         payload[f"{STRAIN_OPTIONS_KEY}_{index}"] = strain

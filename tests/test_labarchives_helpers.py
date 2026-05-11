@@ -279,6 +279,7 @@ def test_create_subject_page_with_json_creates_page_and_attachment() -> None:
         "animal_id": "123-4567",
         "ear_tag": "123",
         "ccn": "123456",
+        "sex": "M",
         "strain_1": "Ai14",
         "genotype_1": "Het",
         "dob": "20240102",
