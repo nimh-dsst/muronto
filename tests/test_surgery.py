@@ -6,7 +6,12 @@ from typing import Any
 import pytest
 
 from muronto_app.config import (
+    COVERSLIP_DIAMETER_OPTIONS_KEY,
+    COVERSLIP_THICKNESS_OPTIONS_KEY,
+    COVERSLIP_TYPE_OPTIONS_KEY,
+    CRANIAL_WINDOW_REGION_OPTIONS_KEY,
     DEFAULT_OPTIONS,
+    HEADPLATE_TYPE_OPTIONS_KEY,
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
     SITE_OPTIONS_KEY,
@@ -15,6 +20,10 @@ from muronto_app.config import (
     VIRUS_SOURCE_OPTIONS_KEY,
 )
 from muronto_app.surgery import (
+    CRANIAL_WINDOW_IMPLANT_TYPE,
+    CRYSTAL_SKULL_IMPLANT_TYPE,
+    ELECTRODE_IMPLANT_TYPE,
+    GRIN_LENS_IMPLANT_TYPE,
     IMPLANT_CATEGORY,
     VIRAL_INJECTION_CATEGORY,
     SurgeryValidationError,
@@ -59,6 +68,24 @@ def valid_viral_procedure() -> dict[str, object]:
                 ],
             }
         ],
+    }
+
+
+def valid_cranial_window_procedure() -> dict[str, object]:
+    return {
+        "surgery_category": IMPLANT_CATEGORY,
+        "implant_type": CRANIAL_WINDOW_IMPLANT_TYPE,
+        "cranial_window": {
+            "headplate_type": "Standard_Y",
+            "coverslip_type": "Standard Single",
+            "coverslip_diameter": "3.5",
+            "coverslip_thickness": "1.5",
+            "region": "S1",
+            "center_ap": 1.0,
+            "center_ml": 2.0,
+            "well_type": "Cement",
+            "notes": "",
+        },
     }
 
 
@@ -164,6 +191,30 @@ def test_build_surgery_payload_supports_multiple_procedures() -> None:
     assert payload["surgical_procedures"][1]["injections"][0]["site"] == "M1"
 
 
+def test_build_surgery_payload_supports_cranial_window_implant() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [valid_cranial_window_procedure()]
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload["surgical_procedures"] == [valid_cranial_window_procedure()]
+
+
+def test_build_surgery_payload_supports_mixed_procedure_types() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [
+        valid_viral_procedure(),
+        valid_cranial_window_procedure(),
+    ]
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert len(payload["surgical_procedures"]) == 2
+    assert payload["surgical_procedures"][1]["implant_type"] == (
+        CRANIAL_WINDOW_IMPLANT_TYPE
+    )
+
+
 def test_build_surgery_payload_supports_multiple_injections() -> None:
     kwargs = valid_surgery_kwargs()
     procedure = valid_viral_procedure()
@@ -242,6 +293,11 @@ def test_build_surgery_payload_supports_multiple_viruses() -> None:
         ["S1"],
         ["AAV1-hSynapsin1-axon-GCaMP6s", "AAV1-EF1a-fDIO-jRGECO1a"],
         ["Addgene", "Custom Source"],
+        [],
+        [],
+        [],
+        [],
+        [],
     )
 
 
@@ -322,7 +378,33 @@ def test_build_surgery_payload_requires_surgical_procedures() -> None:
     )
 
 
-def test_build_surgery_payload_rejects_implant_until_implemented() -> None:
+@pytest.mark.parametrize(
+    "implant_type",
+    [
+        CRYSTAL_SKULL_IMPLANT_TYPE,
+        ELECTRODE_IMPLANT_TYPE,
+        GRIN_LENS_IMPLANT_TYPE,
+        "Custom Implant",
+    ],
+)
+def test_build_surgery_payload_rejects_unsupported_implants(
+    implant_type: str,
+) -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [
+        {"surgery_category": IMPLANT_CATEGORY, "implant_type": implant_type},
+    ]
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    assert (
+        f"{implant_type} implant procedures are not implemented yet."
+        in exc_info.value.errors
+    )
+
+
+def test_build_surgery_payload_requires_implant_type() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["surgical_procedures"] = [
         {"surgery_category": IMPLANT_CATEGORY},
@@ -331,9 +413,63 @@ def test_build_surgery_payload_rejects_implant_until_implemented() -> None:
     with pytest.raises(SurgeryValidationError) as exc_info:
         build_surgery_payload(**kwargs)
 
-    assert (
-        "Implant procedures are not implemented yet." in exc_info.value.errors
+    assert "surgical_procedures_1.implant_type is required." in (
+        exc_info.value.errors
     )
+
+
+def test_build_surgery_payload_validates_cranial_window_fields() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [
+        {
+            "surgery_category": IMPLANT_CATEGORY,
+            "implant_type": CRANIAL_WINDOW_IMPLANT_TYPE,
+            "cranial_window": {
+                "headplate_type": "",
+                "coverslip_type": "",
+                "coverslip_diameter": "",
+                "coverslip_thickness": "",
+                "region": "",
+                "center_ap": None,
+                "center_ml": None,
+                "well_type": "Water",
+                "notes": "",
+            },
+        }
+    ]
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    errors = exc_info.value.errors
+    assert (
+        "surgical_procedures_1.cranial_window.headplate_type is required."
+        in errors
+    )
+    assert (
+        "surgical_procedures_1.cranial_window.coverslip_type is required."
+        in errors
+    )
+    assert (
+        "surgical_procedures_1.cranial_window.coverslip_diameter is required."
+        in errors
+    )
+    assert (
+        "surgical_procedures_1.cranial_window.coverslip_thickness is required."
+        in errors
+    )
+    assert "surgical_procedures_1.cranial_window.region is required." in errors
+    assert "surgical_procedures_1.cranial_window.center_ap is required." in (
+        errors
+    )
+    assert "surgical_procedures_1.cranial_window.center_ml is required." in (
+        errors
+    )
+    expected_well_error = (
+        "surgical_procedures_1.cranial_window.well_type must be one of "
+        "Cement, 3D Printed."
+    )
+    assert expected_well_error in errors
 
 
 def test_build_surgery_payload_validates_viral_required_fields() -> None:
@@ -454,6 +590,55 @@ def test_with_surgery_options_persists_custom_procedure_options() -> None:
     assert (
         "Custom-Source"
         in updated_config[OPTIONS_KEY][VIRUS_SOURCE_OPTIONS_KEY]
+    )
+
+
+def test_with_surgery_options_persists_custom_implant_options() -> None:
+    config = {OPTIONS_KEY: DEFAULT_OPTIONS}
+
+    updated_config, changed = with_surgery_options(
+        config,
+        surgeon="APF",
+        headplate_types=["Custom-Headplate"],
+        coverslip_types=["Custom-Coverslip"],
+        coverslip_diameters=["4.0"],
+        coverslip_thicknesses=["2.0"],
+        cranial_window_regions=["Custom-Region"],
+    )
+
+    assert changed
+    assert (
+        "Custom-Headplate"
+        in updated_config[OPTIONS_KEY][HEADPLATE_TYPE_OPTIONS_KEY]
+    )
+    assert (
+        "Custom-Coverslip"
+        in updated_config[OPTIONS_KEY][COVERSLIP_TYPE_OPTIONS_KEY]
+    )
+    assert "4.0" in updated_config[OPTIONS_KEY][COVERSLIP_DIAMETER_OPTIONS_KEY]
+    assert (
+        "2.0" in updated_config[OPTIONS_KEY][COVERSLIP_THICKNESS_OPTIONS_KEY]
+    )
+    assert (
+        "Custom-Region"
+        in updated_config[OPTIONS_KEY][CRANIAL_WINDOW_REGION_OPTIONS_KEY]
+    )
+
+
+def test_procedure_option_values_returns_implant_options() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [valid_cranial_window_procedure()]
+    payload = build_surgery_payload(**kwargs)
+
+    assert procedure_option_values(payload) == (
+        [],
+        [],
+        [],
+        ["Standard_Y"],
+        ["Standard Single"],
+        ["3.5"],
+        ["1.5"],
+        ["S1"],
     )
 
 

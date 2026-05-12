@@ -6,10 +6,15 @@ import pytest
 
 from muronto_app.config import (
     ASP_KEY,
+    COVERSLIP_DIAMETER_OPTIONS_KEY,
+    COVERSLIP_THICKNESS_OPTIONS_KEY,
+    COVERSLIP_TYPE_OPTIONS_KEY,
+    CRANIAL_WINDOW_REGION_OPTIONS_KEY,
     DEFAULT_OPTIONS,
     DEFAULT_PROJECT_ID_KEY,
     EMAIL_TO_INVESTIGATOR_KEY,
     EMAIL_TO_PROJECT_KEY,
+    HEADPLATE_TYPE_OPTIONS_KEY,
     INVESTIGATOR_KEY,
     LA_HOME_FOLDER_KEY,
     MEDICATION_OPTIONS_KEY,
@@ -251,6 +256,19 @@ def test_validate_config_rejects_malformed_medication_options() -> None:
             ],
         ),
         (VIRUS_SOURCE_OPTIONS_KEY, ["Addgene"]),
+        (HEADPLATE_TYPE_OPTIONS_KEY, ["Standard_Y"]),
+        (
+            COVERSLIP_TYPE_OPTIONS_KEY,
+            [
+                "Standard Single",
+                "Standard Double",
+                "Electropor Single",
+                "Electropor Double",
+            ],
+        ),
+        (COVERSLIP_DIAMETER_OPTIONS_KEY, ["3.5", "3_3.5"]),
+        (COVERSLIP_THICKNESS_OPTIONS_KEY, ["1.5", "1.5_1.5"]),
+        (CRANIAL_WINDOW_REGION_OPTIONS_KEY, ["S1"]),
     ],
 )
 def test_normalize_config_adds_missing_procedure_options(
@@ -274,6 +292,26 @@ def test_normalize_config_adds_missing_procedure_options(
         (SITE_OPTIONS_KEY, "options.sites must be a list."),
         (VIRUS_OPTIONS_KEY, "options.viruses must be a list."),
         (VIRUS_SOURCE_OPTIONS_KEY, "options.virus_sources must be a list."),
+        (
+            HEADPLATE_TYPE_OPTIONS_KEY,
+            "options.headplate_types must be a list.",
+        ),
+        (
+            COVERSLIP_TYPE_OPTIONS_KEY,
+            "options.coverslip_types must be a list.",
+        ),
+        (
+            COVERSLIP_DIAMETER_OPTIONS_KEY,
+            "options.coverslip_diameters must be a list.",
+        ),
+        (
+            COVERSLIP_THICKNESS_OPTIONS_KEY,
+            "options.coverslip_thicknesses must be a list.",
+        ),
+        (
+            CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+            "options.cranial_window_regions must be a list.",
+        ),
     ],
 )
 def test_validate_config_rejects_malformed_procedure_options(

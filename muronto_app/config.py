@@ -32,6 +32,11 @@ MEDICATION_OPTIONS_KEY: Final[str] = "medications"
 SITE_OPTIONS_KEY: Final[str] = "sites"
 VIRUS_OPTIONS_KEY: Final[str] = "viruses"
 VIRUS_SOURCE_OPTIONS_KEY: Final[str] = "virus_sources"
+HEADPLATE_TYPE_OPTIONS_KEY: Final[str] = "headplate_types"
+COVERSLIP_TYPE_OPTIONS_KEY: Final[str] = "coverslip_types"
+COVERSLIP_DIAMETER_OPTIONS_KEY: Final[str] = "coverslip_diameters"
+COVERSLIP_THICKNESS_OPTIONS_KEY: Final[str] = "coverslip_thicknesses"
+CRANIAL_WINDOW_REGION_OPTIONS_KEY: Final[str] = "cranial_window_regions"
 
 PROJECT_VALUE_KEYS: Final[tuple[str, ...]] = (
     PROJECT_ID_KEY,
@@ -60,6 +65,11 @@ SURGERY_OPTION_KEYS: Final[tuple[str, ...]] = (
     SITE_OPTIONS_KEY,
     VIRUS_OPTIONS_KEY,
     VIRUS_SOURCE_OPTIONS_KEY,
+    HEADPLATE_TYPE_OPTIONS_KEY,
+    COVERSLIP_TYPE_OPTIONS_KEY,
+    COVERSLIP_DIAMETER_OPTIONS_KEY,
+    COVERSLIP_THICKNESS_OPTIONS_KEY,
+    CRANIAL_WINDOW_REGION_OPTIONS_KEY,
 )
 
 OPTION_KEYS: Final[tuple[str, ...]] = (
@@ -148,6 +158,16 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "AAV1-EF1a-fDIO-jRGECO1a",
     ],
     VIRUS_SOURCE_OPTIONS_KEY: ["Addgene"],
+    HEADPLATE_TYPE_OPTIONS_KEY: ["Standard_Y"],
+    COVERSLIP_TYPE_OPTIONS_KEY: [
+        "Standard Single",
+        "Standard Double",
+        "Electropor Single",
+        "Electropor Double",
+    ],
+    COVERSLIP_DIAMETER_OPTIONS_KEY: ["3.5", "3_3.5"],
+    COVERSLIP_THICKNESS_OPTIONS_KEY: ["1.5", "1.5_1.5"],
+    CRANIAL_WINDOW_REGION_OPTIONS_KEY: ["S1"],
 }
 
 

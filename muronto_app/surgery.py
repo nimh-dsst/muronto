@@ -9,6 +9,11 @@ from datetime import date, time
 from typing import Any, Final
 
 from muronto_app.config import (
+    COVERSLIP_DIAMETER_OPTIONS_KEY,
+    COVERSLIP_THICKNESS_OPTIONS_KEY,
+    COVERSLIP_TYPE_OPTIONS_KEY,
+    CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+    HEADPLATE_TYPE_OPTIONS_KEY,
     INVESTIGATOR_KEY,
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
@@ -58,6 +63,16 @@ DV_KEY: Final[str] = "dv"
 INFUSION_VOLUME_NL_KEY: Final[str] = "infusion_volume_nl"
 POST_INFUSION_FLOW_TEST_KEY: Final[str] = "post_infusion_flow_test"
 NOTES_KEY: Final[str] = "notes"
+IMPLANT_TYPE_KEY: Final[str] = "implant_type"
+CRANIAL_WINDOW_KEY: Final[str] = "cranial_window"
+HEADPLATE_TYPE_KEY: Final[str] = "headplate_type"
+COVERSLIP_TYPE_KEY: Final[str] = "coverslip_type"
+COVERSLIP_DIAMETER_KEY: Final[str] = "coverslip_diameter"
+COVERSLIP_THICKNESS_KEY: Final[str] = "coverslip_thickness"
+REGION_KEY: Final[str] = "region"
+CENTER_AP_KEY: Final[str] = "center_ap"
+CENTER_ML_KEY: Final[str] = "center_ml"
+WELL_TYPE_KEY: Final[str] = "well_type"
 
 VIRAL_INJECTION_CATEGORY: Final[str] = "Viral Injection"
 IMPLANT_CATEGORY: Final[str] = "Implant"
@@ -67,6 +82,17 @@ SURGERY_CATEGORY_OPTIONS: Final[tuple[str, ...]] = (
 )
 HEMISPHERE_OPTIONS: Final[tuple[str, ...]] = ("LH", "RH")
 POST_INFUSION_FLOW_TEST_OPTIONS: Final[tuple[str, ...]] = ("Pass", "Fail")
+CRANIAL_WINDOW_IMPLANT_TYPE: Final[str] = "Cranial Window"
+CRYSTAL_SKULL_IMPLANT_TYPE: Final[str] = "Crystal Skull"
+ELECTRODE_IMPLANT_TYPE: Final[str] = "Electrode"
+GRIN_LENS_IMPLANT_TYPE: Final[str] = "GRIN Lens"
+IMPLANT_TYPE_OPTIONS: Final[tuple[str, ...]] = (
+    CRANIAL_WINDOW_IMPLANT_TYPE,
+    CRYSTAL_SKULL_IMPLANT_TYPE,
+    ELECTRODE_IMPLANT_TYPE,
+    GRIN_LENS_IMPLANT_TYPE,
+)
+WELL_TYPE_OPTIONS: Final[tuple[str, ...]] = ("Cement", "3D Printed")
 
 CNN_PATTERN_TEXT: Final[str] = r"\d\d\d\d\d\d"
 CNN_PATTERN: Final[re.Pattern[str]] = re.compile(rf"^{CNN_PATTERN_TEXT}$")
@@ -451,6 +477,110 @@ def _validate_injection_entries(
     return injections
 
 
+def _validate_cranial_window(
+    raw_cranial_window: object,
+    *,
+    field_prefix: str,
+    errors: list[str],
+) -> dict[str, str | float]:
+    cranial_window = _raw_mapping(
+        raw_cranial_window,
+        field_name=f"{field_prefix}.{CRANIAL_WINDOW_KEY}",
+        errors=errors,
+    )
+    if cranial_window is None:
+        return {}
+
+    headplate_type = clean_string(cranial_window.get(HEADPLATE_TYPE_KEY))
+    coverslip_type = clean_string(cranial_window.get(COVERSLIP_TYPE_KEY))
+    coverslip_diameter = clean_string(
+        cranial_window.get(COVERSLIP_DIAMETER_KEY)
+    )
+    coverslip_thickness = clean_string(
+        cranial_window.get(COVERSLIP_THICKNESS_KEY)
+    )
+    region = clean_string(cranial_window.get(REGION_KEY))
+    for required_key, value in (
+        (HEADPLATE_TYPE_KEY, headplate_type),
+        (COVERSLIP_TYPE_KEY, coverslip_type),
+        (COVERSLIP_DIAMETER_KEY, coverslip_diameter),
+        (COVERSLIP_THICKNESS_KEY, coverslip_thickness),
+        (REGION_KEY, region),
+    ):
+        _validate_required(
+            field_name=f"{field_prefix}.{CRANIAL_WINDOW_KEY}.{required_key}",
+            value=value,
+            errors=errors,
+        )
+
+    center_ap = _validate_number(
+        field_name=f"{field_prefix}.{CRANIAL_WINDOW_KEY}.{CENTER_AP_KEY}",
+        value=cranial_window.get(CENTER_AP_KEY),
+        errors=errors,
+    )
+    center_ml = _validate_number(
+        field_name=f"{field_prefix}.{CRANIAL_WINDOW_KEY}.{CENTER_ML_KEY}",
+        value=cranial_window.get(CENTER_ML_KEY),
+        errors=errors,
+    )
+    well_type = clean_string(cranial_window.get(WELL_TYPE_KEY))
+    if well_type not in WELL_TYPE_OPTIONS:
+        errors.append(
+            f"{field_prefix}.{CRANIAL_WINDOW_KEY}.{WELL_TYPE_KEY} "
+            "must be one of " + ", ".join(WELL_TYPE_OPTIONS) + "."
+        )
+
+    return {
+        HEADPLATE_TYPE_KEY: headplate_type,
+        COVERSLIP_TYPE_KEY: coverslip_type,
+        COVERSLIP_DIAMETER_KEY: coverslip_diameter,
+        COVERSLIP_THICKNESS_KEY: coverslip_thickness,
+        REGION_KEY: region,
+        CENTER_AP_KEY: center_ap,
+        CENTER_ML_KEY: center_ml,
+        WELL_TYPE_KEY: well_type,
+        NOTES_KEY: clean_string(cranial_window.get(NOTES_KEY)),
+    }
+
+
+def _unsupported_implant_message(implant_type: str) -> str:
+    label = implant_type or "Implant"
+    return f"{label} implant procedures are not implemented yet."
+
+
+def _validate_implant_procedure(
+    procedure_payload: Mapping[str, object],
+    *,
+    field_name: str,
+    surgery_category: str,
+    errors: list[str],
+) -> dict[str, object]:
+    implant_type = clean_string(procedure_payload.get(IMPLANT_TYPE_KEY))
+    if not implant_type:
+        errors.append(f"{field_name}.{IMPLANT_TYPE_KEY} is required.")
+        return {
+            SURGERY_CATEGORY_KEY: surgery_category,
+            IMPLANT_TYPE_KEY: implant_type,
+        }
+
+    if implant_type != CRANIAL_WINDOW_IMPLANT_TYPE:
+        errors.append(_unsupported_implant_message(implant_type))
+        return {
+            SURGERY_CATEGORY_KEY: surgery_category,
+            IMPLANT_TYPE_KEY: implant_type,
+        }
+
+    return {
+        SURGERY_CATEGORY_KEY: surgery_category,
+        IMPLANT_TYPE_KEY: implant_type,
+        CRANIAL_WINDOW_KEY: _validate_cranial_window(
+            procedure_payload.get(CRANIAL_WINDOW_KEY),
+            field_prefix=field_name,
+            errors=errors,
+        ),
+    }
+
+
 def _validate_surgical_procedures(
     raw_procedures: object,
     errors: list[str],
@@ -477,8 +607,14 @@ def _validate_surgical_procedures(
             procedure_payload.get(SURGERY_CATEGORY_KEY)
         )
         if surgery_category == IMPLANT_CATEGORY:
-            errors.append("Implant procedures are not implemented yet.")
-            procedures.append({SURGERY_CATEGORY_KEY: surgery_category})
+            procedures.append(
+                _validate_implant_procedure(
+                    procedure_payload,
+                    field_name=field_name,
+                    surgery_category=surgery_category,
+                    errors=errors,
+                )
+            )
             continue
         if surgery_category != VIRAL_INJECTION_CATEGORY:
             errors.append(
@@ -634,18 +770,58 @@ def medication_names(payload: Mapping[str, Any]) -> list[str]:
 
 def procedure_option_values(
     payload: Mapping[str, Any],
-) -> tuple[list[str], list[str], list[str]]:
-    """Return custom sites, viruses, and virus sources from a payload."""
+) -> tuple[
+    list[str],
+    list[str],
+    list[str],
+    list[str],
+    list[str],
+    list[str],
+    list[str],
+    list[str],
+]:
+    """Return reusable surgery option values from a payload."""
     raw_procedures = payload.get(SURGICAL_PROCEDURES_KEY, [])
     if not isinstance(raw_procedures, list):
-        return [], [], []
+        return [], [], [], [], [], [], [], []
 
     sites: list[str] = []
     viruses: list[str] = []
     virus_sources: list[str] = []
+    headplate_types: list[str] = []
+    coverslip_types: list[str] = []
+    coverslip_diameters: list[str] = []
+    coverslip_thicknesses: list[str] = []
+    cranial_window_regions: list[str] = []
     for raw_procedure in raw_procedures:
         if not isinstance(raw_procedure, Mapping):
             continue
+        raw_cranial_window = raw_procedure.get(CRANIAL_WINDOW_KEY)
+        if isinstance(raw_cranial_window, Mapping):
+            headplate_type = clean_string(
+                raw_cranial_window.get(HEADPLATE_TYPE_KEY)
+            )
+            coverslip_type = clean_string(
+                raw_cranial_window.get(COVERSLIP_TYPE_KEY)
+            )
+            coverslip_diameter = clean_string(
+                raw_cranial_window.get(COVERSLIP_DIAMETER_KEY)
+            )
+            coverslip_thickness = clean_string(
+                raw_cranial_window.get(COVERSLIP_THICKNESS_KEY)
+            )
+            region = clean_string(raw_cranial_window.get(REGION_KEY))
+            if headplate_type:
+                headplate_types.append(headplate_type)
+            if coverslip_type:
+                coverslip_types.append(coverslip_type)
+            if coverslip_diameter:
+                coverslip_diameters.append(coverslip_diameter)
+            if coverslip_thickness:
+                coverslip_thicknesses.append(coverslip_thickness)
+            if region:
+                cranial_window_regions.append(region)
+
         raw_injections = raw_procedure.get(INJECTIONS_KEY, [])
         if not isinstance(raw_injections, list):
             continue
@@ -667,7 +843,16 @@ def procedure_option_values(
                     viruses.append(virus)
                 if virus_source:
                     virus_sources.append(virus_source)
-    return sites, viruses, virus_sources
+    return (
+        sites,
+        viruses,
+        virus_sources,
+        headplate_types,
+        coverslip_types,
+        coverslip_diameters,
+        coverslip_thicknesses,
+        cranial_window_regions,
+    )
 
 
 def with_surgery_options(
@@ -678,6 +863,11 @@ def with_surgery_options(
     sites: Iterable[str] = (),
     viruses: Iterable[str] = (),
     virus_sources: Iterable[str] = (),
+    headplate_types: Iterable[str] = (),
+    coverslip_types: Iterable[str] = (),
+    coverslip_diameters: Iterable[str] = (),
+    coverslip_thicknesses: Iterable[str] = (),
+    cranial_window_regions: Iterable[str] = (),
 ) -> tuple[dict[str, Any], bool]:
     """Return config with reusable surgery options and whether it changed."""
     updated_config = deepcopy(dict(config))
@@ -693,6 +883,28 @@ def with_surgery_options(
         add_option(options, VIRUS_OPTIONS_KEY, virus)
     for virus_source in virus_sources:
         add_option(options, VIRUS_SOURCE_OPTIONS_KEY, virus_source)
+    for headplate_type in headplate_types:
+        add_option(options, HEADPLATE_TYPE_OPTIONS_KEY, headplate_type)
+    for coverslip_type in coverslip_types:
+        add_option(options, COVERSLIP_TYPE_OPTIONS_KEY, coverslip_type)
+    for coverslip_diameter in coverslip_diameters:
+        add_option(
+            options,
+            COVERSLIP_DIAMETER_OPTIONS_KEY,
+            coverslip_diameter,
+        )
+    for coverslip_thickness in coverslip_thicknesses:
+        add_option(
+            options,
+            COVERSLIP_THICKNESS_OPTIONS_KEY,
+            coverslip_thickness,
+        )
+    for cranial_window_region in cranial_window_regions:
+        add_option(
+            options,
+            CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+            cranial_window_region,
+        )
 
     updated_config[OPTIONS_KEY] = options
     return updated_config, options != original_options

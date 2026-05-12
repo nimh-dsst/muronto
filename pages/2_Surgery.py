@@ -8,6 +8,11 @@ import streamlit as st
 from labapi import ApiError
 
 from muronto_app.config import (
+    COVERSLIP_DIAMETER_OPTIONS_KEY,
+    COVERSLIP_THICKNESS_OPTIONS_KEY,
+    COVERSLIP_TYPE_OPTIONS_KEY,
+    CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+    HEADPLATE_TYPE_OPTIONS_KEY,
     LA_HOME_FOLDER_KEY,
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
@@ -48,18 +53,29 @@ from muronto_app.subject import (
 )
 from muronto_app.surgery import (
     AP_KEY,
+    CENTER_AP_KEY,
+    CENTER_ML_KEY,
     CNN_PATTERN_TEXT,
+    COVERSLIP_DIAMETER_KEY,
+    COVERSLIP_THICKNESS_KEY,
+    COVERSLIP_TYPE_KEY,
+    CRANIAL_WINDOW_IMPLANT_TYPE,
+    CRANIAL_WINDOW_KEY,
     DILUTION_KEY,
     DV_KEY,
+    HEADPLATE_TYPE_KEY,
     HEMISPHERE_KEY,
     HEMISPHERE_OPTIONS,
     IMPLANT_CATEGORY,
+    IMPLANT_TYPE_KEY,
+    IMPLANT_TYPE_OPTIONS,
     INFUSION_RATE_NLMIN_KEY,
     INFUSION_VOLUME_NL_KEY,
     ML_KEY,
     NOTES_KEY,
     POST_INFUSION_FLOW_TEST_KEY,
     POST_INFUSION_FLOW_TEST_OPTIONS,
+    REGION_KEY,
     SITE_KEY,
     STOCK_TITER_KEY,
     STOCK_TITER_PATTERN_TEXT,
@@ -70,6 +86,8 @@ from muronto_app.surgery import (
     VIRUS_KEY,
     VIRUS_SOURCE_KEY,
     VIRUS_STOCK_KEY,
+    WELL_TYPE_KEY,
+    WELL_TYPE_OPTIONS,
     SurgeryValidationError,
     build_surgery_payload,
     format_surgery_date,
@@ -189,6 +207,27 @@ def add_reusable_surgery_option(
         viruses=[cleaned_value] if option_key == VIRUS_OPTIONS_KEY else [],
         virus_sources=(
             [cleaned_value] if option_key == VIRUS_SOURCE_OPTIONS_KEY else []
+        ),
+        headplate_types=(
+            [cleaned_value] if option_key == HEADPLATE_TYPE_OPTIONS_KEY else []
+        ),
+        coverslip_types=(
+            [cleaned_value] if option_key == COVERSLIP_TYPE_OPTIONS_KEY else []
+        ),
+        coverslip_diameters=(
+            [cleaned_value]
+            if option_key == COVERSLIP_DIAMETER_OPTIONS_KEY
+            else []
+        ),
+        coverslip_thicknesses=(
+            [cleaned_value]
+            if option_key == COVERSLIP_THICKNESS_OPTIONS_KEY
+            else []
+        ),
+        cranial_window_regions=(
+            [cleaned_value]
+            if option_key == CRANIAL_WINDOW_REGION_OPTIONS_KEY
+            else []
         ),
     )
     if not changed:
@@ -724,6 +763,140 @@ def render_viral_injection_procedure(
     }
 
 
+def render_implant_type(
+    *,
+    procedure_index: int,
+) -> str:
+    choices = [*IMPLANT_TYPE_OPTIONS, OTHER_CHOICE]
+    selected = st.selectbox(
+        "Implant Type",
+        options=choices,
+        key=f"surgery_procedure_{procedure_index}_implant_type",
+    )
+    if selected != OTHER_CHOICE:
+        return selected
+
+    return clean_string(
+        st.text_input(
+            "New Implant Type",
+            key=f"surgery_procedure_{procedure_index}_implant_type_other",
+        )
+    )
+
+
+def render_cranial_window_implant(
+    *,
+    procedure_index: int,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> dict[str, object]:
+    prefix = f"surgery_procedure_{procedure_index}_cranial_window"
+    headplate_type = render_select_with_immediate_other(
+        label="Headplate Type",
+        options=options,
+        options_key=HEADPLATE_TYPE_OPTIONS_KEY,
+        widget_key=f"{prefix}_headplate_type",
+        other_prompt="New Headplate Type",
+        notebook=notebook,
+        config=config,
+    )
+    coverslip_type = render_select_with_immediate_other(
+        label="Coverslip Type",
+        options=options,
+        options_key=COVERSLIP_TYPE_OPTIONS_KEY,
+        widget_key=f"{prefix}_coverslip_type",
+        other_prompt="New Coverslip Type",
+        notebook=notebook,
+        config=config,
+    )
+    coverslip_diameter = render_select_with_immediate_other(
+        label="Coverslip Diameter",
+        options=options,
+        options_key=COVERSLIP_DIAMETER_OPTIONS_KEY,
+        widget_key=f"{prefix}_coverslip_diameter",
+        other_prompt="New Coverslip Diameter",
+        notebook=notebook,
+        config=config,
+    )
+    coverslip_thickness = render_select_with_immediate_other(
+        label="Coverslip Thickness",
+        options=options,
+        options_key=COVERSLIP_THICKNESS_OPTIONS_KEY,
+        widget_key=f"{prefix}_coverslip_thickness",
+        other_prompt="New Coverslip Thickness",
+        notebook=notebook,
+        config=config,
+    )
+    region = render_select_with_immediate_other(
+        label="Region",
+        options=options,
+        options_key=CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+        widget_key=f"{prefix}_region",
+        other_prompt="New Region",
+        notebook=notebook,
+        config=config,
+    )
+    center_ap = st.number_input(
+        "Center AP",
+        value=None,
+        step=0.1,
+        key=f"{prefix}_center_ap",
+    )
+    center_ml = st.number_input(
+        "Center ML",
+        value=None,
+        step=0.1,
+        key=f"{prefix}_center_ml",
+    )
+    well_type = st.selectbox(
+        "Well Type",
+        options=WELL_TYPE_OPTIONS,
+        key=f"{prefix}_well_type",
+    )
+    notes = st.text_input(
+        "Notes",
+        key=f"{prefix}_notes",
+    )
+
+    return {
+        HEADPLATE_TYPE_KEY: headplate_type,
+        COVERSLIP_TYPE_KEY: coverslip_type,
+        COVERSLIP_DIAMETER_KEY: coverslip_diameter,
+        COVERSLIP_THICKNESS_KEY: coverslip_thickness,
+        REGION_KEY: region,
+        CENTER_AP_KEY: center_ap,
+        CENTER_ML_KEY: center_ml,
+        WELL_TYPE_KEY: well_type,
+        NOTES_KEY: notes,
+    }
+
+
+def render_implant_procedure(
+    *,
+    procedure_index: int,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> dict[str, object]:
+    implant_type = render_implant_type(procedure_index=procedure_index)
+    procedure: dict[str, object] = {
+        SURGERY_CATEGORY_KEY: IMPLANT_CATEGORY,
+        IMPLANT_TYPE_KEY: implant_type,
+    }
+    if implant_type != CRANIAL_WINDOW_IMPLANT_TYPE:
+        st.info("Only Cranial Window implant fields are implemented yet.")
+        return procedure
+
+    procedure[CRANIAL_WINDOW_KEY] = render_cranial_window_implant(
+        procedure_index=procedure_index,
+        options=options,
+        notebook=notebook,
+        config=config,
+    )
+    return procedure
+
+
 def render_surgical_procedures(
     *,
     options: dict[str, list[str]],
@@ -752,8 +925,14 @@ def render_surgical_procedures(
             key=f"surgery_procedure_{procedure_index}_category",
         )
         if category == IMPLANT_CATEGORY:
-            st.info("Implant procedure fields are not implemented yet.")
-            procedures.append({SURGERY_CATEGORY_KEY: category})
+            procedures.append(
+                render_implant_procedure(
+                    procedure_index=procedure_index,
+                    options=options,
+                    notebook=notebook,
+                    config=config,
+                )
+            )
             continue
 
         procedures.append(
@@ -776,6 +955,11 @@ def save_reusable_surgery_options(
     sites: list[str],
     viruses: list[str],
     virus_sources: list[str],
+    headplate_types: list[str],
+    coverslip_types: list[str],
+    coverslip_diameters: list[str],
+    coverslip_thicknesses: list[str],
+    cranial_window_regions: list[str],
 ) -> None:
     updated_config, changed = with_surgery_options(
         config,
@@ -784,6 +968,11 @@ def save_reusable_surgery_options(
         sites=sites,
         viruses=viruses,
         virus_sources=virus_sources,
+        headplate_types=headplate_types,
+        coverslip_types=coverslip_types,
+        coverslip_diameters=coverslip_diameters,
+        coverslip_thicknesses=coverslip_thicknesses,
+        cranial_window_regions=cranial_window_regions,
     )
     if not changed:
         return
@@ -904,7 +1093,16 @@ def render_surgery_form(
         return
 
     try:
-        sites, viruses, virus_sources = procedure_option_values(payload)
+        (
+            sites,
+            viruses,
+            virus_sources,
+            headplate_types,
+            coverslip_types,
+            coverslip_diameters,
+            coverslip_thicknesses,
+            cranial_window_regions,
+        ) = procedure_option_values(payload)
         save_reusable_surgery_options(
             notebook=notebook,
             config=config,
@@ -913,6 +1111,11 @@ def render_surgery_form(
             sites=sites,
             viruses=viruses,
             virus_sources=virus_sources,
+            headplate_types=headplate_types,
+            coverslip_types=coverslip_types,
+            coverslip_diameters=coverslip_diameters,
+            coverslip_thicknesses=coverslip_thicknesses,
+            cranial_window_regions=cranial_window_regions,
         )
     except ApiError as exc:
         st.warning(
