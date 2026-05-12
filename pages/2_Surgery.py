@@ -456,41 +456,44 @@ def render_medications(
 def render_perioperative_monitoring(
     options: dict[str, list[str]],
 ) -> PerioperativeValues:
-    st.subheader("Perioperative Monitoring & Medications")
-    weight_pre_g = st.number_input(
-        "Weight Pre (grams)",
-        min_value=0.0,
-        value=None,
-        step=0.1,
-        key="surgery_weight_pre_g",
-    )
-    weight_post_g = st.number_input(
-        "Weight Post (grams)",
-        min_value=0.0,
-        value=None,
-        step=0.1,
-        key="surgery_weight_post_g",
-    )
-
-    st.markdown("#### Medications")
-    if st.button(
-        "Add medication",
-        help="Add another medication entry.",
-        use_container_width=True,
+    with st.expander(
+        "Perioperative Monitoring & Medications",
+        expanded=True,
     ):
-        increment_medication_count()
-        st.rerun()
-    medications = render_medications(options)
+        weight_pre_g = st.number_input(
+            "Weight Pre (grams)",
+            min_value=0.0,
+            value=None,
+            step=0.1,
+            key="surgery_weight_pre_g",
+        )
+        weight_post_g = st.number_input(
+            "Weight Post (grams)",
+            min_value=0.0,
+            value=None,
+            step=0.1,
+            key="surgery_weight_post_g",
+        )
 
-    start_time = render_surgery_time("Start Time", "surgery_start_time")
-    end_time = render_surgery_time("End Time", "surgery_end_time")
-    bregma_lambda_dist_mm = st.number_input(
-        "Bregma Lambda Distance (mm)",
-        min_value=0.0,
-        value=None,
-        step=0.1,
-        key="surgery_bregma_lambda_dist_mm",
-    )
+        st.markdown("#### Medications")
+        if st.button(
+            "Add medication",
+            help="Add another medication entry.",
+            use_container_width=True,
+        ):
+            increment_medication_count()
+            st.rerun()
+        medications = render_medications(options)
+
+        start_time = render_surgery_time("Start Time", "surgery_start_time")
+        end_time = render_surgery_time("End Time", "surgery_end_time")
+        bregma_lambda_dist_mm = st.number_input(
+            "Bregma Lambda Distance (mm)",
+            min_value=0.0,
+            value=None,
+            step=0.1,
+            key="surgery_bregma_lambda_dist_mm",
+        )
 
     return {
         "weight_pre_g": weight_pre_g,
@@ -918,31 +921,37 @@ def render_surgical_procedures(
         1,
         st.session_state[SURGERY_PROCEDURE_COUNT_KEY] + 1,
     ):
-        st.markdown(f"### Procedure {procedure_index}")
-        category = st.selectbox(
-            "Subject Category",
-            options=SURGERY_CATEGORY_OPTIONS,
-            key=f"surgery_procedure_{procedure_index}_category",
+        is_latest_procedure = (
+            procedure_index == st.session_state[SURGERY_PROCEDURE_COUNT_KEY]
         )
-        if category == IMPLANT_CATEGORY:
+        with st.expander(
+            f"Procedure {procedure_index}",
+            expanded=is_latest_procedure,
+        ):
+            category = st.selectbox(
+                "Subject Category",
+                options=SURGERY_CATEGORY_OPTIONS,
+                key=f"surgery_procedure_{procedure_index}_category",
+            )
+            if category == IMPLANT_CATEGORY:
+                procedures.append(
+                    render_implant_procedure(
+                        procedure_index=procedure_index,
+                        options=options,
+                        notebook=notebook,
+                        config=config,
+                    )
+                )
+                continue
+
             procedures.append(
-                render_implant_procedure(
+                render_viral_injection_procedure(
                     procedure_index=procedure_index,
                     options=options,
                     notebook=notebook,
                     config=config,
                 )
             )
-            continue
-
-        procedures.append(
-            render_viral_injection_procedure(
-                procedure_index=procedure_index,
-                options=options,
-                notebook=notebook,
-                config=config,
-            )
-        )
     return procedures
 
 
@@ -1027,20 +1036,21 @@ def render_surgery_form(
     subject_payload = selected_subject.payload
     options = normalize_options(config.get(OPTIONS_KEY))
 
-    surgeon = render_surgeon_select(options)
-    surgery_date = render_surgery_date()
+    with st.expander("Surgery Details", expanded=True):
+        surgeon = render_surgeon_select(options)
+        surgery_date = render_surgery_date()
 
-    render_text_guidance(
-        "PreOp CNN must match the regex pattern "
-        f"`{CNN_PATTERN_TEXT}`, for example `123456`."
-    )
-    preop_cnn = st.text_input("PreOp CNN", key="surgery_preop_cnn")
+        render_text_guidance(
+            "PreOp CNN must match the regex pattern "
+            f"`{CNN_PATTERN_TEXT}`, for example `123456`."
+        )
+        preop_cnn = st.text_input("PreOp CNN", key="surgery_preop_cnn")
 
-    render_text_guidance(
-        "PostOp CNN must match the regex pattern "
-        f"`{CNN_PATTERN_TEXT}`, for example `123456`."
-    )
-    postop_cnn = st.text_input("PostOp CNN", key="surgery_postop_cnn")
+        render_text_guidance(
+            "PostOp CNN must match the regex pattern "
+            f"`{CNN_PATTERN_TEXT}`, for example `123456`."
+        )
+        postop_cnn = st.text_input("PostOp CNN", key="surgery_postop_cnn")
 
     perioperative_values = render_perioperative_monitoring(options)
     surgical_procedures = render_surgical_procedures(
@@ -1147,24 +1157,25 @@ def main() -> None:
     st.write(f"Project ID: {project[PROJECT_ID_KEY]}")
     st.write(f"Investigator: {investigator}")
 
-    st.subheader("Subject Information")
-    subject_records = load_subject_records(notebook, project)
-    if subject_records is None:
-        return
-    if not subject_records:
-        st.info("No subject JSON records were found in the project folder.")
-        return
+    with st.expander("Subject Information", expanded=True):
+        subject_records = load_subject_records(notebook, project)
+        if subject_records is None:
+            return
+        if not subject_records:
+            st.info(
+                "No subject JSON records were found in the project folder."
+            )
+            return
 
-    selected_subject_index = st.selectbox(
-        "Subject",
-        options=list(range(len(subject_records))),
-        format_func=lambda index: subject_label(subject_records[index]),
-        key="surgery_subject",
-    )
-    selected_subject = subject_records[selected_subject_index]
-    render_selected_subject(selected_subject)
+        selected_subject_index = st.selectbox(
+            "Subject",
+            options=list(range(len(subject_records))),
+            format_func=lambda index: subject_label(subject_records[index]),
+            key="surgery_subject",
+        )
+        selected_subject = subject_records[selected_subject_index]
+        render_selected_subject(selected_subject)
 
-    st.subheader("Surgery Details")
     render_surgery_form(
         notebook=notebook,
         config=config,
