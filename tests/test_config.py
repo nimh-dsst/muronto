@@ -20,10 +20,13 @@ from muronto_app.config import (
     PROJECTS_KEY,
     SCHEMA_VERSION,
     SCHEMA_VERSION_KEY,
+    SITE_OPTIONS_KEY,
     SOURCE_TYPE_OPTIONS_KEY,
     SPECIES_KEY,
     STRAIN_OPTIONS_KEY,
     SURGEON_OPTIONS_KEY,
+    VIRUS_OPTIONS_KEY,
+    VIRUS_SOURCE_OPTIONS_KEY,
     ConfigValidationError,
     active_project,
     normalize_config,
@@ -229,6 +232,61 @@ def test_validate_config_rejects_malformed_medication_options() -> None:
     errors = validate_config_payload(payload)
 
     assert errors == ["options.medications must contain only strings."]
+
+
+@pytest.mark.parametrize(
+    ("option_key", "expected_defaults"),
+    [
+        (
+            SITE_OPTIONS_KEY,
+            ["S1", "M1", "M2", "vlOFC", "vmThal", "Claustrum", "BLA"],
+        ),
+        (
+            VIRUS_OPTIONS_KEY,
+            [
+                "AAV1-hSynapsin1-axon-GCaMP6s",
+                "AAV1-Syn-Flex-NES-jRGECO1a-WPRE-SV40",
+                "AAV9-EF1a-DIO-FLPo-WPRE-hGHpA",
+                "AAV1-EF1a-fDIO-jRGECO1a",
+            ],
+        ),
+        (VIRUS_SOURCE_OPTIONS_KEY, ["Addgene"]),
+    ],
+)
+def test_normalize_config_adds_missing_procedure_options(
+    option_key: str,
+    expected_defaults: list[str],
+) -> None:
+    payload = valid_payload()
+    options = cast(dict[str, object], payload[OPTIONS_KEY])
+    del options[option_key]
+
+    errors = validate_config_payload(payload)
+    config = normalize_config(payload)
+
+    assert errors == []
+    assert config[OPTIONS_KEY][option_key] == expected_defaults
+
+
+@pytest.mark.parametrize(
+    ("option_key", "expected_error"),
+    [
+        (SITE_OPTIONS_KEY, "options.sites must be a list."),
+        (VIRUS_OPTIONS_KEY, "options.viruses must be a list."),
+        (VIRUS_SOURCE_OPTIONS_KEY, "options.virus_sources must be a list."),
+    ],
+)
+def test_validate_config_rejects_malformed_procedure_options(
+    option_key: str,
+    expected_error: str,
+) -> None:
+    payload = valid_payload()
+    options = cast(dict[str, object], payload[OPTIONS_KEY])
+    options[option_key] = "bad"
+
+    errors = validate_config_payload(payload)
+
+    assert errors == [expected_error]
 
 
 def test_upsert_project_config_creates_initial_config_and_mappings() -> None:

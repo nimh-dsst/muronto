@@ -9,18 +9,57 @@ from muronto_app.config import (
     DEFAULT_OPTIONS,
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
+    SITE_OPTIONS_KEY,
     SURGEON_OPTIONS_KEY,
+    VIRUS_OPTIONS_KEY,
+    VIRUS_SOURCE_OPTIONS_KEY,
 )
 from muronto_app.surgery import (
+    IMPLANT_CATEGORY,
+    VIRAL_INJECTION_CATEGORY,
     SurgeryValidationError,
     build_surgery_payload,
     format_surgery_date,
     format_surgery_time,
     medication_names,
+    procedure_option_values,
     surgery_json_filename,
     with_surgeon_options,
     with_surgery_options,
 )
+
+
+def valid_viral_procedure() -> dict[str, object]:
+    return {
+        "surgery_category": VIRAL_INJECTION_CATEGORY,
+        "injections": [
+            {
+                "site": "S1",
+                "hemisphere": "LH",
+                "viruses": [
+                    {
+                        "virus": "AAV1-hSynapsin1-axon-GCaMP6s",
+                        "virus_source": "Addgene",
+                        "virus_id": "123",
+                        "virus_stock": "stock A",
+                        "stock_titer": "2_10_13",
+                        "dilution": "1:2",
+                        "infusion_rate_nlmin": 50.0,
+                    }
+                ],
+                "infusions": [
+                    {
+                        "ap": 1.0,
+                        "ml": 2.0,
+                        "dv": -3.0,
+                        "infusion_volume_nl": 100.0,
+                        "post_infusion_flow_test": "Pass",
+                        "notes": "",
+                    }
+                ],
+            }
+        ],
+    }
 
 
 def valid_surgery_kwargs() -> dict[str, Any]:
@@ -41,6 +80,7 @@ def valid_surgery_kwargs() -> dict[str, Any]:
         "start_time": time(9, 0),
         "end_time": time(14, 0),
         "bregma_lambda_dist_mm": 4.2,
+        "surgical_procedures": [valid_viral_procedure()],
     }
 
 
@@ -79,7 +119,130 @@ def test_build_surgery_payload_formats_date_and_values() -> None:
         "start_time": "0900",
         "end_time": "1400",
         "bregma_lambda_dist_mm": 4.2,
+        "surgical_procedures": [valid_viral_procedure()],
     }
+
+
+def test_build_surgery_payload_supports_multiple_procedures() -> None:
+    kwargs = valid_surgery_kwargs()
+    second_procedure = valid_viral_procedure()
+    second_procedure["injections"] = [
+        {
+            "site": "M1",
+            "hemisphere": "RH",
+            "viruses": [
+                {
+                    "virus": "AAV1-EF1a-fDIO-jRGECO1a",
+                    "virus_source": "Addgene",
+                    "virus_id": "456",
+                    "virus_stock": "stock B",
+                    "stock_titer": "3_10_12",
+                    "dilution": "1:4",
+                    "infusion_rate_nlmin": 25.0,
+                }
+            ],
+            "infusions": [
+                {
+                    "ap": -1.0,
+                    "ml": 1.5,
+                    "dv": -2.5,
+                    "infusion_volume_nl": 75.0,
+                    "post_infusion_flow_test": "Pass",
+                    "notes": "second site",
+                }
+            ],
+        }
+    ]
+    kwargs["surgical_procedures"] = [
+        valid_viral_procedure(),
+        second_procedure,
+    ]
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert len(payload["surgical_procedures"]) == 2
+    assert payload["surgical_procedures"][1]["injections"][0]["site"] == "M1"
+
+
+def test_build_surgery_payload_supports_multiple_injections() -> None:
+    kwargs = valid_surgery_kwargs()
+    procedure = valid_viral_procedure()
+    procedure["injections"] = [
+        *procedure["injections"],  # type: ignore[misc]
+        {
+            "site": "BLA",
+            "hemisphere": "RH",
+            "viruses": [
+                {
+                    "virus": "AAV9-EF1a-DIO-FLPo-WPRE-hGHpA",
+                    "virus_source": "Addgene",
+                    "virus_id": "789",
+                    "virus_stock": "stock C",
+                    "stock_titer": "1_10_11",
+                    "dilution": "undiluted",
+                    "infusion_rate_nlmin": 40.0,
+                }
+            ],
+            "infusions": [
+                {
+                    "ap": 0.5,
+                    "ml": -1.5,
+                    "dv": -4.0,
+                    "infusion_volume_nl": 125.0,
+                    "post_infusion_flow_test": "Fail",
+                    "notes": "",
+                }
+            ],
+        },
+    ]
+    kwargs["surgical_procedures"] = [procedure]
+
+    payload = build_surgery_payload(**kwargs)
+
+    injections = payload["surgical_procedures"][0]["injections"]
+    assert len(injections) == 2
+    assert injections[1]["site"] == "BLA"
+
+
+def test_build_surgery_payload_supports_multiple_viruses() -> None:
+    kwargs = valid_surgery_kwargs()
+    procedure = valid_viral_procedure()
+    injection = procedure["injections"][0]  # type: ignore[index]
+    injection["viruses"] = [  # type: ignore[index]
+        *injection["viruses"],  # type: ignore[index]
+        {
+            "virus": "AAV1-EF1a-fDIO-jRGECO1a",
+            "virus_source": "Custom Source",
+            "virus_id": "456",
+            "virus_stock": "stock B",
+            "stock_titer": "3_10_12",
+            "dilution": "1:3",
+            "infusion_rate_nlmin": 30.0,
+        },
+    ]
+    injection["infusions"] = [  # type: ignore[index]
+        *injection["infusions"],  # type: ignore[index]
+        {
+            "ap": 2.0,
+            "ml": -2.0,
+            "dv": -1.0,
+            "infusion_volume_nl": 50.0,
+            "post_infusion_flow_test": "Pass",
+            "notes": "second infusion",
+        },
+    ]
+    kwargs["surgical_procedures"] = [procedure]
+
+    payload = build_surgery_payload(**kwargs)
+
+    injection_payload = payload["surgical_procedures"][0]["injections"][0]
+    assert len(injection_payload["viruses"]) == 2
+    assert len(injection_payload["infusions"]) == 2
+    assert procedure_option_values(payload) == (
+        ["S1"],
+        ["AAV1-hSynapsin1-axon-GCaMP6s", "AAV1-EF1a-fDIO-jRGECO1a"],
+        ["Addgene", "Custom Source"],
+    )
 
 
 def test_build_surgery_payload_supports_multiple_medications() -> None:
@@ -146,6 +309,84 @@ def test_build_surgery_payload_requires_perioperative_fields() -> None:
     )
 
 
+def test_build_surgery_payload_requires_surgical_procedures() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = []
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    assert (
+        "surgical_procedures must include at least one entry."
+        in exc_info.value.errors
+    )
+
+
+def test_build_surgery_payload_rejects_implant_until_implemented() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [
+        {"surgery_category": IMPLANT_CATEGORY},
+    ]
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    assert (
+        "Implant procedures are not implemented yet." in exc_info.value.errors
+    )
+
+
+def test_build_surgery_payload_validates_viral_required_fields() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [
+        {
+            "surgery_category": VIRAL_INJECTION_CATEGORY,
+            "injections": [
+                {
+                    "site": "",
+                    "hemisphere": "Both",
+                    "viruses": [],
+                    "infusions": [],
+                }
+            ],
+        }
+    ]
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    errors = exc_info.value.errors
+    assert "surgical_procedures_1.injections_1.site is required." in errors
+    assert (
+        "surgical_procedures_1.injections_1.hemisphere must be one of LH, RH."
+        in errors
+    )
+    assert (
+        "surgical_procedures_1.injections_1.viruses must include at least one "
+        "entry."
+    ) in errors
+    assert (
+        "surgical_procedures_1.injections_1.infusions must include at least "
+        "one entry."
+    ) in errors
+
+
+def test_build_surgery_payload_validates_stock_titer_pattern() -> None:
+    kwargs = valid_surgery_kwargs()
+    procedure = valid_viral_procedure()
+    injection = procedure["injections"][0]  # type: ignore[index]
+    virus = injection["viruses"][0]  # type: ignore[index]
+    virus["stock_titer"] = "2x10x13"  # type: ignore[index]
+    kwargs["surgical_procedures"] = [procedure]
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    assert any(
+        "stock_titer must match" in error for error in exc_info.value.errors
+    )
+
+
 def test_build_surgery_payload_validates_medication_rows() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["medications"] = [
@@ -194,6 +435,26 @@ def test_with_surgery_options_persists_custom_medications() -> None:
 
     assert changed
     assert "Custom-Med" in updated_config[OPTIONS_KEY][MEDICATION_OPTIONS_KEY]
+
+
+def test_with_surgery_options_persists_custom_procedure_options() -> None:
+    config = {OPTIONS_KEY: DEFAULT_OPTIONS}
+
+    updated_config, changed = with_surgery_options(
+        config,
+        surgeon="APF",
+        sites=["Custom-Site"],
+        viruses=["Custom-Virus"],
+        virus_sources=["Custom-Source"],
+    )
+
+    assert changed
+    assert "Custom-Site" in updated_config[OPTIONS_KEY][SITE_OPTIONS_KEY]
+    assert "Custom-Virus" in updated_config[OPTIONS_KEY][VIRUS_OPTIONS_KEY]
+    assert (
+        "Custom-Source"
+        in updated_config[OPTIONS_KEY][VIRUS_SOURCE_OPTIONS_KEY]
+    )
 
 
 def test_with_surgeon_options_ignores_existing_surgeon() -> None:

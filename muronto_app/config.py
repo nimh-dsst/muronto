@@ -29,6 +29,9 @@ STRAIN_OPTIONS_KEY: Final[str] = "strain"
 SOURCE_TYPE_OPTIONS_KEY: Final[str] = "source_type"
 SURGEON_OPTIONS_KEY: Final[str] = "Surgeon"
 MEDICATION_OPTIONS_KEY: Final[str] = "medications"
+SITE_OPTIONS_KEY: Final[str] = "sites"
+VIRUS_OPTIONS_KEY: Final[str] = "viruses"
+VIRUS_SOURCE_OPTIONS_KEY: Final[str] = "virus_sources"
 
 PROJECT_VALUE_KEYS: Final[tuple[str, ...]] = (
     PROJECT_ID_KEY,
@@ -54,6 +57,9 @@ SUBJECT_OPTION_KEYS: Final[tuple[str, ...]] = (
 SURGERY_OPTION_KEYS: Final[tuple[str, ...]] = (
     SURGEON_OPTIONS_KEY,
     MEDICATION_OPTIONS_KEY,
+    SITE_OPTIONS_KEY,
+    VIRUS_OPTIONS_KEY,
+    VIRUS_SOURCE_OPTIONS_KEY,
 )
 
 OPTION_KEYS: Final[tuple[str, ...]] = (
@@ -126,6 +132,22 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
     SOURCE_TYPE_OPTIONS_KEY: ["Breeding", "JAX"],
     SURGEON_OPTIONS_KEY: ["APF", "CY", "DK", "EP", "LZ", "MH", "SB", "SL"],
     MEDICATION_OPTIONS_KEY: ["Meloxicam", "Ethiqa XR", "Dexamethasone"],
+    SITE_OPTIONS_KEY: [
+        "S1",
+        "M1",
+        "M2",
+        "vlOFC",
+        "vmThal",
+        "Claustrum",
+        "BLA",
+    ],
+    VIRUS_OPTIONS_KEY: [
+        "AAV1-hSynapsin1-axon-GCaMP6s",
+        "AAV1-Syn-Flex-NES-jRGECO1a-WPRE-SV40",
+        "AAV9-EF1a-DIO-FLPo-WPRE-hGHpA",
+        "AAV1-EF1a-fDIO-jRGECO1a",
+    ],
+    VIRUS_SOURCE_OPTIONS_KEY: ["Addgene"],
 }
 
 

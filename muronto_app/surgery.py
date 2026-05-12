@@ -13,7 +13,10 @@ from muronto_app.config import (
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
     PROJECT_ID_KEY,
+    SITE_OPTIONS_KEY,
     SURGEON_OPTIONS_KEY,
+    VIRUS_OPTIONS_KEY,
+    VIRUS_SOURCE_OPTIONS_KEY,
     add_option,
     clean_string,
     normalize_options,
@@ -35,9 +38,42 @@ VOLUME_KEY: Final[str] = "volume"
 START_TIME_KEY: Final[str] = "start_time"
 END_TIME_KEY: Final[str] = "end_time"
 BREGMA_LAMBDA_DIST_MM_KEY: Final[str] = "bregma_lambda_dist_mm"
+SURGICAL_PROCEDURES_KEY: Final[str] = "surgical_procedures"
+SURGERY_CATEGORY_KEY: Final[str] = "surgery_category"
+INJECTIONS_KEY: Final[str] = "injections"
+SITE_KEY: Final[str] = "site"
+HEMISPHERE_KEY: Final[str] = "hemisphere"
+VIRUSES_KEY: Final[str] = "viruses"
+VIRUS_KEY: Final[str] = "virus"
+VIRUS_SOURCE_KEY: Final[str] = "virus_source"
+VIRUS_ID_KEY: Final[str] = "virus_id"
+VIRUS_STOCK_KEY: Final[str] = "virus_stock"
+STOCK_TITER_KEY: Final[str] = "stock_titer"
+DILUTION_KEY: Final[str] = "dilution"
+INFUSION_RATE_NLMIN_KEY: Final[str] = "infusion_rate_nlmin"
+INFUSIONS_KEY: Final[str] = "infusions"
+AP_KEY: Final[str] = "ap"
+ML_KEY: Final[str] = "ml"
+DV_KEY: Final[str] = "dv"
+INFUSION_VOLUME_NL_KEY: Final[str] = "infusion_volume_nl"
+POST_INFUSION_FLOW_TEST_KEY: Final[str] = "post_infusion_flow_test"
+NOTES_KEY: Final[str] = "notes"
+
+VIRAL_INJECTION_CATEGORY: Final[str] = "Viral Injection"
+IMPLANT_CATEGORY: Final[str] = "Implant"
+SURGERY_CATEGORY_OPTIONS: Final[tuple[str, ...]] = (
+    VIRAL_INJECTION_CATEGORY,
+    IMPLANT_CATEGORY,
+)
+HEMISPHERE_OPTIONS: Final[tuple[str, ...]] = ("LH", "RH")
+POST_INFUSION_FLOW_TEST_OPTIONS: Final[tuple[str, ...]] = ("Pass", "Fail")
 
 CNN_PATTERN_TEXT: Final[str] = r"\d\d\d\d\d\d"
 CNN_PATTERN: Final[re.Pattern[str]] = re.compile(rf"^{CNN_PATTERN_TEXT}$")
+STOCK_TITER_PATTERN_TEXT: Final[str] = r"\d_\d\d_\d\d"
+STOCK_TITER_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"^{STOCK_TITER_PATTERN_TEXT}$"
+)
 
 
 class SurgeryValidationError(ValueError):
@@ -108,6 +144,21 @@ def _validate_non_negative_number(
     return numeric_value
 
 
+def _validate_number(
+    *,
+    field_name: str,
+    value: object,
+    errors: list[str],
+) -> float:
+    if value is None:
+        errors.append(f"{field_name} is required.")
+        return 0.0
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        errors.append(f"{field_name} must be a number.")
+        return 0.0
+    return float(value)
+
+
 def _format_date_or_error(
     *,
     field_name: str,
@@ -167,6 +218,290 @@ def _validate_medications(
     return medications
 
 
+def _raw_list(
+    raw_value: object,
+    *,
+    field_name: str,
+    errors: list[str],
+) -> list[object]:
+    if not isinstance(raw_value, list):
+        errors.append(f"{field_name} must be a list.")
+        return []
+    if not raw_value:
+        errors.append(f"{field_name} must include at least one entry.")
+    return raw_value
+
+
+def _raw_mapping(
+    raw_value: object,
+    *,
+    field_name: str,
+    errors: list[str],
+) -> Mapping[str, object] | None:
+    if not isinstance(raw_value, Mapping):
+        errors.append(f"{field_name} must be an object.")
+        return None
+    return raw_value
+
+
+def _validate_stock_titer(
+    *,
+    field_name: str,
+    value: str,
+    errors: list[str],
+) -> None:
+    if not value:
+        errors.append(f"{field_name} is required.")
+        return
+
+    if not STOCK_TITER_PATTERN.fullmatch(value):
+        errors.append(
+            f"{field_name} must match {STOCK_TITER_PATTERN_TEXT}, "
+            "for example 2_10_13."
+        )
+
+
+def _validate_virus_entries(
+    raw_viruses: object,
+    *,
+    field_prefix: str,
+    errors: list[str],
+) -> list[dict[str, str | float]]:
+    viruses: list[dict[str, str | float]] = []
+    for virus_index, raw_virus in enumerate(
+        _raw_list(
+            raw_viruses,
+            field_name=f"{field_prefix}.{VIRUSES_KEY}",
+            errors=errors,
+        ),
+        start=1,
+    ):
+        field_name = f"{field_prefix}.{VIRUSES_KEY}_{virus_index}"
+        virus_payload = _raw_mapping(
+            raw_virus,
+            field_name=field_name,
+            errors=errors,
+        )
+        if virus_payload is None:
+            continue
+
+        virus = clean_string(virus_payload.get(VIRUS_KEY))
+        virus_source = clean_string(virus_payload.get(VIRUS_SOURCE_KEY))
+        virus_id = clean_string(virus_payload.get(VIRUS_ID_KEY))
+        virus_stock = clean_string(virus_payload.get(VIRUS_STOCK_KEY))
+        stock_titer = clean_string(virus_payload.get(STOCK_TITER_KEY))
+        dilution = clean_string(virus_payload.get(DILUTION_KEY))
+
+        for required_key, value in (
+            (VIRUS_KEY, virus),
+            (VIRUS_SOURCE_KEY, virus_source),
+            (VIRUS_ID_KEY, virus_id),
+            (VIRUS_STOCK_KEY, virus_stock),
+            (DILUTION_KEY, dilution),
+        ):
+            _validate_required(
+                field_name=f"{field_name}.{required_key}",
+                value=value,
+                errors=errors,
+            )
+        _validate_stock_titer(
+            field_name=f"{field_name}.{STOCK_TITER_KEY}",
+            value=stock_titer,
+            errors=errors,
+        )
+        infusion_rate_nlmin = _validate_non_negative_number(
+            field_name=f"{field_name}.{INFUSION_RATE_NLMIN_KEY}",
+            value=virus_payload.get(INFUSION_RATE_NLMIN_KEY),
+            errors=errors,
+        )
+        viruses.append(
+            {
+                VIRUS_KEY: virus,
+                VIRUS_SOURCE_KEY: virus_source,
+                VIRUS_ID_KEY: virus_id,
+                VIRUS_STOCK_KEY: virus_stock,
+                STOCK_TITER_KEY: stock_titer,
+                DILUTION_KEY: dilution,
+                INFUSION_RATE_NLMIN_KEY: infusion_rate_nlmin,
+            }
+        )
+    return viruses
+
+
+def _validate_infusion_entries(
+    raw_infusions: object,
+    *,
+    field_prefix: str,
+    errors: list[str],
+) -> list[dict[str, str | float]]:
+    infusions: list[dict[str, str | float]] = []
+    for infusion_index, raw_infusion in enumerate(
+        _raw_list(
+            raw_infusions,
+            field_name=f"{field_prefix}.{INFUSIONS_KEY}",
+            errors=errors,
+        ),
+        start=1,
+    ):
+        field_name = f"{field_prefix}.{INFUSIONS_KEY}_{infusion_index}"
+        infusion_payload = _raw_mapping(
+            raw_infusion,
+            field_name=field_name,
+            errors=errors,
+        )
+        if infusion_payload is None:
+            continue
+
+        ap = _validate_number(
+            field_name=f"{field_name}.{AP_KEY}",
+            value=infusion_payload.get(AP_KEY),
+            errors=errors,
+        )
+        ml = _validate_number(
+            field_name=f"{field_name}.{ML_KEY}",
+            value=infusion_payload.get(ML_KEY),
+            errors=errors,
+        )
+        dv = _validate_number(
+            field_name=f"{field_name}.{DV_KEY}",
+            value=infusion_payload.get(DV_KEY),
+            errors=errors,
+        )
+        infusion_volume_nl = _validate_non_negative_number(
+            field_name=f"{field_name}.{INFUSION_VOLUME_NL_KEY}",
+            value=infusion_payload.get(INFUSION_VOLUME_NL_KEY),
+            errors=errors,
+        )
+        post_infusion_flow_test = clean_string(
+            infusion_payload.get(POST_INFUSION_FLOW_TEST_KEY)
+        )
+        if post_infusion_flow_test not in POST_INFUSION_FLOW_TEST_OPTIONS:
+            errors.append(
+                f"{field_name}.{POST_INFUSION_FLOW_TEST_KEY} must be one of "
+                + ", ".join(POST_INFUSION_FLOW_TEST_OPTIONS)
+                + "."
+            )
+        infusions.append(
+            {
+                AP_KEY: ap,
+                ML_KEY: ml,
+                DV_KEY: dv,
+                INFUSION_VOLUME_NL_KEY: infusion_volume_nl,
+                POST_INFUSION_FLOW_TEST_KEY: post_infusion_flow_test,
+                NOTES_KEY: clean_string(infusion_payload.get(NOTES_KEY)),
+            }
+        )
+    return infusions
+
+
+def _validate_injection_entries(
+    raw_injections: object,
+    *,
+    field_prefix: str,
+    errors: list[str],
+) -> list[dict[str, object]]:
+    injections: list[dict[str, object]] = []
+    for injection_index, raw_injection in enumerate(
+        _raw_list(
+            raw_injections,
+            field_name=f"{field_prefix}.{INJECTIONS_KEY}",
+            errors=errors,
+        ),
+        start=1,
+    ):
+        field_name = f"{field_prefix}.{INJECTIONS_KEY}_{injection_index}"
+        injection_payload = _raw_mapping(
+            raw_injection,
+            field_name=field_name,
+            errors=errors,
+        )
+        if injection_payload is None:
+            continue
+
+        site = clean_string(injection_payload.get(SITE_KEY))
+        hemisphere = clean_string(injection_payload.get(HEMISPHERE_KEY))
+        _validate_required(
+            field_name=f"{field_name}.{SITE_KEY}",
+            value=site,
+            errors=errors,
+        )
+        if hemisphere not in HEMISPHERE_OPTIONS:
+            errors.append(
+                f"{field_name}.{HEMISPHERE_KEY} must be one of "
+                + ", ".join(HEMISPHERE_OPTIONS)
+                + "."
+            )
+
+        injections.append(
+            {
+                SITE_KEY: site,
+                HEMISPHERE_KEY: hemisphere,
+                VIRUSES_KEY: _validate_virus_entries(
+                    injection_payload.get(VIRUSES_KEY),
+                    field_prefix=field_name,
+                    errors=errors,
+                ),
+                INFUSIONS_KEY: _validate_infusion_entries(
+                    injection_payload.get(INFUSIONS_KEY),
+                    field_prefix=field_name,
+                    errors=errors,
+                ),
+            }
+        )
+    return injections
+
+
+def _validate_surgical_procedures(
+    raw_procedures: object,
+    errors: list[str],
+) -> list[dict[str, object]]:
+    procedures: list[dict[str, object]] = []
+    for procedure_index, raw_procedure in enumerate(
+        _raw_list(
+            raw_procedures,
+            field_name=SURGICAL_PROCEDURES_KEY,
+            errors=errors,
+        ),
+        start=1,
+    ):
+        field_name = f"{SURGICAL_PROCEDURES_KEY}_{procedure_index}"
+        procedure_payload = _raw_mapping(
+            raw_procedure,
+            field_name=field_name,
+            errors=errors,
+        )
+        if procedure_payload is None:
+            continue
+
+        surgery_category = clean_string(
+            procedure_payload.get(SURGERY_CATEGORY_KEY)
+        )
+        if surgery_category == IMPLANT_CATEGORY:
+            errors.append("Implant procedures are not implemented yet.")
+            procedures.append({SURGERY_CATEGORY_KEY: surgery_category})
+            continue
+        if surgery_category != VIRAL_INJECTION_CATEGORY:
+            errors.append(
+                f"{field_name}.{SURGERY_CATEGORY_KEY} must be one of "
+                + ", ".join(SURGERY_CATEGORY_OPTIONS)
+                + "."
+            )
+            procedures.append({SURGERY_CATEGORY_KEY: surgery_category})
+            continue
+
+        procedures.append(
+            {
+                SURGERY_CATEGORY_KEY: surgery_category,
+                INJECTIONS_KEY: _validate_injection_entries(
+                    procedure_payload.get(INJECTIONS_KEY),
+                    field_prefix=field_name,
+                    errors=errors,
+                ),
+            }
+        )
+    return procedures
+
+
 def build_surgery_payload(
     *,
     project_id: str,
@@ -183,6 +518,7 @@ def build_surgery_payload(
     start_time: time | None,
     end_time: time | None,
     bregma_lambda_dist_mm: int | float | None,
+    surgical_procedures: object,
 ) -> dict[str, Any]:
     """Validate form values and return the flat surgery JSON payload."""
     cleaned_project_id = clean_string(project_id)
@@ -254,6 +590,10 @@ def build_surgery_payload(
         errors=errors,
     )
     cleaned_medications = _validate_medications(medications, errors)
+    cleaned_surgical_procedures = _validate_surgical_procedures(
+        surgical_procedures,
+        errors,
+    )
 
     if errors:
         raise SurgeryValidationError(errors)
@@ -273,6 +613,7 @@ def build_surgery_payload(
         START_TIME_KEY: formatted_start_time,
         END_TIME_KEY: formatted_end_time,
         BREGMA_LAMBDA_DIST_MM_KEY: cleaned_bregma_lambda_dist_mm,
+        SURGICAL_PROCEDURES_KEY: cleaned_surgical_procedures,
     }
 
 
@@ -291,11 +632,52 @@ def medication_names(payload: Mapping[str, Any]) -> list[str]:
     return names
 
 
+def procedure_option_values(
+    payload: Mapping[str, Any],
+) -> tuple[list[str], list[str], list[str]]:
+    """Return custom sites, viruses, and virus sources from a payload."""
+    raw_procedures = payload.get(SURGICAL_PROCEDURES_KEY, [])
+    if not isinstance(raw_procedures, list):
+        return [], [], []
+
+    sites: list[str] = []
+    viruses: list[str] = []
+    virus_sources: list[str] = []
+    for raw_procedure in raw_procedures:
+        if not isinstance(raw_procedure, Mapping):
+            continue
+        raw_injections = raw_procedure.get(INJECTIONS_KEY, [])
+        if not isinstance(raw_injections, list):
+            continue
+        for raw_injection in raw_injections:
+            if not isinstance(raw_injection, Mapping):
+                continue
+            site = clean_string(raw_injection.get(SITE_KEY))
+            if site:
+                sites.append(site)
+            raw_viruses = raw_injection.get(VIRUSES_KEY, [])
+            if not isinstance(raw_viruses, list):
+                continue
+            for raw_virus in raw_viruses:
+                if not isinstance(raw_virus, Mapping):
+                    continue
+                virus = clean_string(raw_virus.get(VIRUS_KEY))
+                virus_source = clean_string(raw_virus.get(VIRUS_SOURCE_KEY))
+                if virus:
+                    viruses.append(virus)
+                if virus_source:
+                    virus_sources.append(virus_source)
+    return sites, viruses, virus_sources
+
+
 def with_surgery_options(
     config: Mapping[str, Any],
     *,
     surgeon: str,
     medications: Iterable[str] = (),
+    sites: Iterable[str] = (),
+    viruses: Iterable[str] = (),
+    virus_sources: Iterable[str] = (),
 ) -> tuple[dict[str, Any], bool]:
     """Return config with reusable surgery options and whether it changed."""
     updated_config = deepcopy(dict(config))
@@ -305,6 +687,12 @@ def with_surgery_options(
     add_option(options, SURGEON_OPTIONS_KEY, surgeon)
     for medication in medications:
         add_option(options, MEDICATION_OPTIONS_KEY, medication)
+    for site in sites:
+        add_option(options, SITE_OPTIONS_KEY, site)
+    for virus in viruses:
+        add_option(options, VIRUS_OPTIONS_KEY, virus)
+    for virus_source in virus_sources:
+        add_option(options, VIRUS_SOURCE_OPTIONS_KEY, virus_source)
 
     updated_config[OPTIONS_KEY] = options
     return updated_config, options != original_options

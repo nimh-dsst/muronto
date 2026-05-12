@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date, time
 from typing import Any, TypedDict
 
@@ -12,7 +13,10 @@ from muronto_app.config import (
     OPTIONS_KEY,
     OTHER_CHOICE,
     PROJECT_ID_KEY,
+    SITE_OPTIONS_KEY,
     SURGEON_OPTIONS_KEY,
+    VIRUS_OPTIONS_KEY,
+    VIRUS_SOURCE_OPTIONS_KEY,
     choice_options,
     clean_string,
     investigator_for_user,
@@ -43,18 +47,42 @@ from muronto_app.subject import (
     STRAIN_OPTIONS_KEY,
 )
 from muronto_app.surgery import (
+    AP_KEY,
     CNN_PATTERN_TEXT,
+    DILUTION_KEY,
+    DV_KEY,
+    HEMISPHERE_KEY,
+    HEMISPHERE_OPTIONS,
+    IMPLANT_CATEGORY,
+    INFUSION_RATE_NLMIN_KEY,
+    INFUSION_VOLUME_NL_KEY,
+    ML_KEY,
+    NOTES_KEY,
+    POST_INFUSION_FLOW_TEST_KEY,
+    POST_INFUSION_FLOW_TEST_OPTIONS,
+    SITE_KEY,
+    STOCK_TITER_KEY,
+    STOCK_TITER_PATTERN_TEXT,
+    SURGERY_CATEGORY_KEY,
+    SURGERY_CATEGORY_OPTIONS,
+    VIRAL_INJECTION_CATEGORY,
+    VIRUS_ID_KEY,
+    VIRUS_KEY,
+    VIRUS_SOURCE_KEY,
+    VIRUS_STOCK_KEY,
     SurgeryValidationError,
     build_surgery_payload,
     format_surgery_date,
     format_surgery_time,
     medication_names,
+    procedure_option_values,
     with_surgery_options,
 )
 
 st.set_page_config(page_title="Muronto Surgery", layout="centered")
 
 SURGERY_MEDICATION_COUNT_KEY = "surgery_medication_count"
+SURGERY_PROCEDURE_COUNT_KEY = "surgery_procedure_count"
 
 
 class PerioperativeValues(TypedDict):
@@ -66,8 +94,19 @@ class PerioperativeValues(TypedDict):
     bregma_lambda_dist_mm: int | float | None
 
 
+class SurgicalOptionValues(TypedDict):
+    sites: list[str]
+    viruses: list[str]
+    virus_sources: list[str]
+
+
 def render_text_guidance(text: str) -> None:
     st.markdown(text)
+
+
+def stable_key_part(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
+    return cleaned[:48] or "value"
 
 
 def render_surgeon_select(options: dict[str, list[str]]) -> str:
@@ -129,6 +168,171 @@ def render_surgery_time(label: str, key: str) -> time | None:
         st.write(format_surgery_time(selected_time))
         return selected_time
     return None
+
+
+def add_reusable_surgery_option(
+    *,
+    notebook: Any,
+    config: dict[str, Any],
+    option_key: str,
+    value: str,
+) -> None:
+    cleaned_value = clean_string(value)
+    if not cleaned_value:
+        st.warning("Enter a value before adding it.")
+        return
+
+    updated_config, changed = with_surgery_options(
+        config,
+        surgeon="",
+        sites=[cleaned_value] if option_key == SITE_OPTIONS_KEY else [],
+        viruses=[cleaned_value] if option_key == VIRUS_OPTIONS_KEY else [],
+        virus_sources=(
+            [cleaned_value] if option_key == VIRUS_SOURCE_OPTIONS_KEY else []
+        ),
+    )
+    if not changed:
+        return
+
+    config_page = st.session_state.get(CONFIG_PAGE_STATE_KEY)
+    if config_page is None:
+        config_page = find_root_config_page(notebook)
+
+    if config_page is None:
+        st.warning(
+            "Could not find muronto_config to save the reusable option."
+        )
+        return
+
+    attachment_entry = save_config_attachment(
+        config_page,
+        updated_config,
+        existing_entry=st.session_state.get(CONFIG_ATTACHMENT_STATE_KEY),
+    )
+    st.session_state[CONFIG_STATE_KEY] = updated_config
+    st.session_state[CONFIG_ATTACHMENT_STATE_KEY] = attachment_entry
+    st.session_state[CONFIG_PAGE_STATE_KEY] = config_page
+    st.session_state[CONFIG_PAGE_ID_STATE_KEY] = config_page.id
+
+
+def add_option_and_select(
+    *,
+    notebook: Any,
+    config: dict[str, Any],
+    option_key: str,
+    value: str,
+    select_key: str,
+    default_key: str,
+) -> None:
+    cleaned_value = clean_string(value)
+    if not cleaned_value:
+        st.warning("Enter a value before adding it.")
+        return
+
+    add_reusable_surgery_option(
+        notebook=notebook,
+        config=config,
+        option_key=option_key,
+        value=cleaned_value,
+    )
+    st.session_state.pop(select_key, None)
+    st.session_state[default_key] = cleaned_value
+    st.rerun()
+
+
+def render_select_with_immediate_other(
+    *,
+    label: str,
+    options: dict[str, list[str]],
+    options_key: str,
+    widget_key: str,
+    other_prompt: str,
+    notebook: Any,
+    config: dict[str, Any],
+) -> str:
+    choices = choice_options(options, options_key)
+    default_key = f"{widget_key}_default"
+    default_value = clean_string(st.session_state.pop(default_key, ""))
+    index = choices.index(default_value) if default_value in choices else 0
+    selected = st.selectbox(
+        label,
+        options=choices,
+        index=index,
+        key=widget_key,
+    )
+    if selected != OTHER_CHOICE:
+        return selected
+
+    new_value = st.text_input(
+        other_prompt,
+        key=f"{widget_key}_other",
+    )
+    if st.button(
+        f"Add {label}",
+        key=f"{widget_key}_add",
+        use_container_width=True,
+    ):
+        add_option_and_select(
+            notebook=notebook,
+            config=config,
+            option_key=options_key,
+            value=new_value,
+            select_key=widget_key,
+            default_key=default_key,
+        )
+    return clean_string(new_value)
+
+
+def render_virus_multiselect(
+    *,
+    options: dict[str, list[str]],
+    widget_key: str,
+    notebook: Any,
+    config: dict[str, Any],
+) -> list[str]:
+    choices = choice_options(options, VIRUS_OPTIONS_KEY)
+    default_key = f"{widget_key}_default"
+    default_values = st.session_state.pop(default_key, None)
+    selected = st.multiselect(
+        "Viruses",
+        options=choices,
+        default=default_values if isinstance(default_values, list) else None,
+        key=widget_key,
+    )
+    selected_viruses = [
+        clean_string(virus)
+        for virus in selected
+        if virus != OTHER_CHOICE and clean_string(virus)
+    ]
+
+    if OTHER_CHOICE not in selected:
+        return selected_viruses
+
+    new_virus = st.text_input(
+        "New Virus",
+        key=f"{widget_key}_other",
+    )
+    if st.button(
+        "Add Virus",
+        key=f"{widget_key}_add",
+        use_container_width=True,
+    ):
+        cleaned_virus = clean_string(new_virus)
+        if not cleaned_virus:
+            st.warning("Enter a virus before adding it.")
+            return selected_viruses
+
+        add_reusable_surgery_option(
+            notebook=notebook,
+            config=config,
+            option_key=VIRUS_OPTIONS_KEY,
+            value=cleaned_virus,
+        )
+        st.session_state.pop(widget_key, None)
+        st.session_state[default_key] = [*selected_viruses, cleaned_virus]
+        st.rerun()
+
+    return selected_viruses
 
 
 def subject_label(record: SubjectRecord) -> str:
@@ -259,17 +463,327 @@ def render_perioperative_monitoring(
     }
 
 
+def increment_procedure_count() -> None:
+    st.session_state[SURGERY_PROCEDURE_COUNT_KEY] = (
+        st.session_state.get(SURGERY_PROCEDURE_COUNT_KEY, 1) + 1
+    )
+
+
+def procedure_injection_count_key(procedure_index: int) -> str:
+    return f"surgery_procedure_{procedure_index}_injection_count"
+
+
+def injection_infusion_count_key(
+    procedure_index: int,
+    injection_index: int,
+) -> str:
+    return (
+        f"surgery_procedure_{procedure_index}_"
+        f"injection_{injection_index}_infusion_count"
+    )
+
+
+def increment_injection_count(procedure_index: int) -> None:
+    count_key = procedure_injection_count_key(procedure_index)
+    st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+
+
+def increment_infusion_count(
+    procedure_index: int,
+    injection_index: int,
+) -> None:
+    count_key = injection_infusion_count_key(
+        procedure_index,
+        injection_index,
+    )
+    st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+
+
+def render_virus_attributes(
+    *,
+    procedure_index: int,
+    injection_index: int,
+    virus: str,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> dict[str, object]:
+    virus_key = (
+        f"surgery_procedure_{procedure_index}_injection_{injection_index}_"
+        f"virus_{stable_key_part(virus)}"
+    )
+    st.markdown(f"##### {virus}")
+    virus_source = render_select_with_immediate_other(
+        label="Virus Source",
+        options=options,
+        options_key=VIRUS_SOURCE_OPTIONS_KEY,
+        widget_key=f"{virus_key}_source",
+        other_prompt="New Virus Source",
+        notebook=notebook,
+        config=config,
+    )
+    virus_id = st.text_input(
+        "Virus ID",
+        key=f"{virus_key}_virus_id",
+    )
+    virus_stock = st.text_input(
+        "Virus Stock",
+        key=f"{virus_key}_virus_stock",
+    )
+    render_text_guidance(
+        "Stock Titer must match the regex pattern "
+        f"`{STOCK_TITER_PATTERN_TEXT}`, for example `2_10_13`."
+    )
+    stock_titer = st.text_input(
+        "Stock Titer",
+        key=f"{virus_key}_stock_titer",
+    )
+    dilution = st.text_input(
+        "Dilution",
+        key=f"{virus_key}_dilution",
+    )
+    infusion_rate_nlmin = st.number_input(
+        "Infusion Rate (nl/min)",
+        min_value=0.0,
+        value=None,
+        step=1.0,
+        key=f"{virus_key}_infusion_rate_nlmin",
+    )
+    return {
+        VIRUS_KEY: virus,
+        VIRUS_SOURCE_KEY: virus_source,
+        VIRUS_ID_KEY: virus_id,
+        VIRUS_STOCK_KEY: virus_stock,
+        STOCK_TITER_KEY: stock_titer,
+        DILUTION_KEY: dilution,
+        INFUSION_RATE_NLMIN_KEY: infusion_rate_nlmin,
+    }
+
+
+def render_infusions(
+    *,
+    procedure_index: int,
+    injection_index: int,
+) -> list[dict[str, object]]:
+    count_key = injection_infusion_count_key(
+        procedure_index,
+        injection_index,
+    )
+    st.session_state.setdefault(count_key, 1)
+
+    if st.button(
+        "Add infusion location",
+        key=(
+            f"surgery_procedure_{procedure_index}_"
+            f"injection_{injection_index}_add_infusion"
+        ),
+        use_container_width=True,
+    ):
+        increment_infusion_count(procedure_index, injection_index)
+        st.rerun()
+
+    infusions: list[dict[str, object]] = []
+    for infusion_index in range(1, st.session_state[count_key] + 1):
+        prefix = (
+            f"surgery_procedure_{procedure_index}_"
+            f"injection_{injection_index}_infusion_{infusion_index}"
+        )
+        st.markdown(f"##### Infusion Location {infusion_index}")
+        ap = st.number_input(
+            "AP",
+            value=None,
+            step=0.1,
+            key=f"{prefix}_ap",
+        )
+        ml = st.number_input(
+            "ML",
+            value=None,
+            step=0.1,
+            key=f"{prefix}_ml",
+        )
+        dv = st.number_input(
+            "DV",
+            value=None,
+            step=0.1,
+            key=f"{prefix}_dv",
+        )
+        infusion_volume_nl = st.number_input(
+            "Infusion Volume (nl)",
+            min_value=0.0,
+            value=None,
+            step=10.0,
+            key=f"{prefix}_infusion_volume_nl",
+        )
+        post_infusion_flow_test = st.selectbox(
+            "Post Infusion Flow Test",
+            options=POST_INFUSION_FLOW_TEST_OPTIONS,
+            key=f"{prefix}_post_infusion_flow_test",
+        )
+        notes = st.text_input(
+            "Notes",
+            key=f"{prefix}_notes",
+        )
+        infusions.append(
+            {
+                AP_KEY: ap,
+                ML_KEY: ml,
+                DV_KEY: dv,
+                INFUSION_VOLUME_NL_KEY: infusion_volume_nl,
+                POST_INFUSION_FLOW_TEST_KEY: post_infusion_flow_test,
+                NOTES_KEY: notes,
+            }
+        )
+    return infusions
+
+
+def render_injection(
+    *,
+    procedure_index: int,
+    injection_index: int,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> dict[str, object]:
+    prefix = f"surgery_procedure_{procedure_index}_injection_{injection_index}"
+    st.markdown(f"#### Injection {injection_index}")
+    site = render_select_with_immediate_other(
+        label="Site",
+        options=options,
+        options_key=SITE_OPTIONS_KEY,
+        widget_key=f"{prefix}_site",
+        other_prompt="New Site",
+        notebook=notebook,
+        config=config,
+    )
+    hemisphere = st.selectbox(
+        "hemisphere",
+        options=HEMISPHERE_OPTIONS,
+        key=f"{prefix}_hemisphere",
+    )
+    selected_viruses = render_virus_multiselect(
+        options=options,
+        widget_key=f"{prefix}_viruses",
+        notebook=notebook,
+        config=config,
+    )
+    viruses = [
+        render_virus_attributes(
+            procedure_index=procedure_index,
+            injection_index=injection_index,
+            virus=virus,
+            options=options,
+            notebook=notebook,
+            config=config,
+        )
+        for virus in selected_viruses
+    ]
+
+    st.markdown("##### Infusion Locations")
+    infusions = render_infusions(
+        procedure_index=procedure_index,
+        injection_index=injection_index,
+    )
+    return {
+        SITE_KEY: site,
+        HEMISPHERE_KEY: hemisphere,
+        "viruses": viruses,
+        "infusions": infusions,
+    }
+
+
+def render_viral_injection_procedure(
+    *,
+    procedure_index: int,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> dict[str, object]:
+    count_key = procedure_injection_count_key(procedure_index)
+    st.session_state.setdefault(count_key, 1)
+    if st.button(
+        "Add injection",
+        key=f"surgery_procedure_{procedure_index}_add_injection",
+        use_container_width=True,
+    ):
+        increment_injection_count(procedure_index)
+        st.rerun()
+
+    injections = [
+        render_injection(
+            procedure_index=procedure_index,
+            injection_index=injection_index,
+            options=options,
+            notebook=notebook,
+            config=config,
+        )
+        for injection_index in range(1, st.session_state[count_key] + 1)
+    ]
+    return {
+        SURGERY_CATEGORY_KEY: VIRAL_INJECTION_CATEGORY,
+        "injections": injections,
+    }
+
+
+def render_surgical_procedures(
+    *,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> list[dict[str, object]]:
+    st.subheader("Surgical Procedures")
+    st.session_state.setdefault(SURGERY_PROCEDURE_COUNT_KEY, 1)
+    if st.button(
+        "Add surgical procedure",
+        key="surgery_add_procedure",
+        use_container_width=True,
+    ):
+        increment_procedure_count()
+        st.rerun()
+
+    procedures: list[dict[str, object]] = []
+    for procedure_index in range(
+        1,
+        st.session_state[SURGERY_PROCEDURE_COUNT_KEY] + 1,
+    ):
+        st.markdown(f"### Procedure {procedure_index}")
+        category = st.selectbox(
+            "Subject Category",
+            options=SURGERY_CATEGORY_OPTIONS,
+            key=f"surgery_procedure_{procedure_index}_category",
+        )
+        if category == IMPLANT_CATEGORY:
+            st.info("Implant procedure fields are not implemented yet.")
+            procedures.append({SURGERY_CATEGORY_KEY: category})
+            continue
+
+        procedures.append(
+            render_viral_injection_procedure(
+                procedure_index=procedure_index,
+                options=options,
+                notebook=notebook,
+                config=config,
+            )
+        )
+    return procedures
+
+
 def save_reusable_surgery_options(
     *,
     notebook: Any,
     config: dict[str, Any],
     surgeon: str,
     medications: list[str],
+    sites: list[str],
+    viruses: list[str],
+    virus_sources: list[str],
 ) -> None:
     updated_config, changed = with_surgery_options(
         config,
         surgeon=surgeon,
         medications=medications,
+        sites=sites,
+        viruses=viruses,
+        virus_sources=virus_sources,
     )
     if not changed:
         return
@@ -340,6 +854,11 @@ def render_surgery_form(
     postop_cnn = st.text_input("PostOp CNN", key="surgery_postop_cnn")
 
     perioperative_values = render_perioperative_monitoring(options)
+    surgical_procedures = render_surgical_procedures(
+        options=options,
+        notebook=notebook,
+        config=config,
+    )
 
     submitted = st.button(
         "Save surgery record",
@@ -367,6 +886,7 @@ def render_surgery_form(
             bregma_lambda_dist_mm=perioperative_values[
                 "bregma_lambda_dist_mm"
             ],
+            surgical_procedures=surgical_procedures,
         )
     except SurgeryValidationError as exc:
         st.error("Complete the surgery form before saving the record.")
@@ -384,11 +904,15 @@ def render_surgery_form(
         return
 
     try:
+        sites, viruses, virus_sources = procedure_option_values(payload)
         save_reusable_surgery_options(
             notebook=notebook,
             config=config,
             surgeon=clean_string(payload["surgeon"]),
             medications=medication_names(payload),
+            sites=sites,
+            viruses=viruses,
+            virus_sources=virus_sources,
         )
     except ApiError as exc:
         st.warning(
