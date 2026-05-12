@@ -10,6 +10,8 @@ from muronto_app.config import (
     COVERSLIP_THICKNESS_OPTIONS_KEY,
     COVERSLIP_TYPE_OPTIONS_KEY,
     CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+    CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
+    CS_TYPE_OPTIONS_KEY,
     DEFAULT_OPTIONS,
     HEADPLATE_TYPE_OPTIONS_KEY,
     MEDICATION_OPTIONS_KEY,
@@ -85,6 +87,20 @@ def valid_cranial_window_procedure() -> dict[str, object]:
             "center_ml": 2.0,
             "well_type": "Cement",
             "notes": "",
+        },
+    }
+
+
+def valid_crystal_skull_procedure() -> dict[str, object]:
+    return {
+        "surgery_category": IMPLANT_CATEGORY,
+        "implant_type": CRYSTAL_SKULL_IMPLANT_TYPE,
+        "crystal_skull": {
+            "headplate_type": "Standard_0",
+            "cs_type": "Standard",
+            "front_ap": 1.0,
+            "left_ml": 2.0,
+            "well_type": "Cement",
         },
     }
 
@@ -200,18 +216,31 @@ def test_build_surgery_payload_supports_cranial_window_implant() -> None:
     assert payload["surgical_procedures"] == [valid_cranial_window_procedure()]
 
 
+def test_build_surgery_payload_supports_crystal_skull_implant() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [valid_crystal_skull_procedure()]
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload["surgical_procedures"] == [valid_crystal_skull_procedure()]
+
+
 def test_build_surgery_payload_supports_mixed_procedure_types() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["surgical_procedures"] = [
         valid_viral_procedure(),
         valid_cranial_window_procedure(),
+        valid_crystal_skull_procedure(),
     ]
 
     payload = build_surgery_payload(**kwargs)
 
-    assert len(payload["surgical_procedures"]) == 2
+    assert len(payload["surgical_procedures"]) == 3
     assert payload["surgical_procedures"][1]["implant_type"] == (
         CRANIAL_WINDOW_IMPLANT_TYPE
+    )
+    assert payload["surgical_procedures"][2]["implant_type"] == (
+        CRYSTAL_SKULL_IMPLANT_TYPE
     )
 
 
@@ -293,6 +322,8 @@ def test_build_surgery_payload_supports_multiple_viruses() -> None:
         ["S1"],
         ["AAV1-hSynapsin1-axon-GCaMP6s", "AAV1-EF1a-fDIO-jRGECO1a"],
         ["Addgene", "Custom Source"],
+        [],
+        [],
         [],
         [],
         [],
@@ -381,7 +412,6 @@ def test_build_surgery_payload_requires_surgical_procedures() -> None:
 @pytest.mark.parametrize(
     "implant_type",
     [
-        CRYSTAL_SKULL_IMPLANT_TYPE,
         ELECTRODE_IMPLANT_TYPE,
         GRIN_LENS_IMPLANT_TYPE,
         "Custom Implant",
@@ -470,6 +500,44 @@ def test_build_surgery_payload_validates_cranial_window_fields() -> None:
         "Cement, 3D Printed."
     )
     assert expected_well_error in errors
+
+
+def test_build_surgery_payload_validates_crystal_skull_fields() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [
+        {
+            "surgery_category": IMPLANT_CATEGORY,
+            "implant_type": CRYSTAL_SKULL_IMPLANT_TYPE,
+            "crystal_skull": {
+                "headplate_type": "",
+                "cs_type": "",
+                "front_ap": None,
+                "left_ml": None,
+                "well_type": "",
+            },
+        }
+    ]
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    errors = exc_info.value.errors
+    assert (
+        "surgical_procedures_1.crystal_skull.headplate_type is required."
+        in errors
+    )
+    assert "surgical_procedures_1.crystal_skull.cs_type is required." in (
+        errors
+    )
+    assert "surgical_procedures_1.crystal_skull.front_ap is required." in (
+        errors
+    )
+    assert "surgical_procedures_1.crystal_skull.left_ml is required." in (
+        errors
+    )
+    assert "surgical_procedures_1.crystal_skull.well_type is required." in (
+        errors
+    )
 
 
 def test_build_surgery_payload_validates_viral_required_fields() -> None:
@@ -604,6 +672,8 @@ def test_with_surgery_options_persists_custom_implant_options() -> None:
         coverslip_diameters=["4.0"],
         coverslip_thicknesses=["2.0"],
         cranial_window_regions=["Custom-Region"],
+        cs_types=["Custom-CS"],
+        crystal_skull_well_types=["Custom-Well"],
     )
 
     assert changed
@@ -623,6 +693,11 @@ def test_with_surgery_options_persists_custom_implant_options() -> None:
         "Custom-Region"
         in updated_config[OPTIONS_KEY][CRANIAL_WINDOW_REGION_OPTIONS_KEY]
     )
+    assert "Custom-CS" in updated_config[OPTIONS_KEY][CS_TYPE_OPTIONS_KEY]
+    assert (
+        "Custom-Well"
+        in updated_config[OPTIONS_KEY][CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY]
+    )
 
 
 def test_procedure_option_values_returns_implant_options() -> None:
@@ -639,6 +714,27 @@ def test_procedure_option_values_returns_implant_options() -> None:
         ["3.5"],
         ["1.5"],
         ["S1"],
+        [],
+        [],
+    )
+
+
+def test_procedure_option_values_returns_crystal_skull_options() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [valid_crystal_skull_procedure()]
+    payload = build_surgery_payload(**kwargs)
+
+    assert procedure_option_values(payload) == (
+        [],
+        [],
+        [],
+        ["Standard_0"],
+        [],
+        [],
+        [],
+        [],
+        ["Standard"],
+        ["Cement"],
     )
 
 

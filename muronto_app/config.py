@@ -37,6 +37,8 @@ COVERSLIP_TYPE_OPTIONS_KEY: Final[str] = "coverslip_types"
 COVERSLIP_DIAMETER_OPTIONS_KEY: Final[str] = "coverslip_diameters"
 COVERSLIP_THICKNESS_OPTIONS_KEY: Final[str] = "coverslip_thicknesses"
 CRANIAL_WINDOW_REGION_OPTIONS_KEY: Final[str] = "cranial_window_regions"
+CS_TYPE_OPTIONS_KEY: Final[str] = "cs_types"
+CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY: Final[str] = "crystal_skill_well_types"
 
 PROJECT_VALUE_KEYS: Final[tuple[str, ...]] = (
     PROJECT_ID_KEY,
@@ -70,6 +72,8 @@ SURGERY_OPTION_KEYS: Final[tuple[str, ...]] = (
     COVERSLIP_DIAMETER_OPTIONS_KEY,
     COVERSLIP_THICKNESS_OPTIONS_KEY,
     CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+    CS_TYPE_OPTIONS_KEY,
+    CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
 )
 
 OPTION_KEYS: Final[tuple[str, ...]] = (
@@ -158,7 +162,7 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "AAV1-EF1a-fDIO-jRGECO1a",
     ],
     VIRUS_SOURCE_OPTIONS_KEY: ["Addgene"],
-    HEADPLATE_TYPE_OPTIONS_KEY: ["Standard_Y"],
+    HEADPLATE_TYPE_OPTIONS_KEY: ["Standard_Y", "Standard_0"],
     COVERSLIP_TYPE_OPTIONS_KEY: [
         "Standard Single",
         "Standard Double",
@@ -168,6 +172,8 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
     COVERSLIP_DIAMETER_OPTIONS_KEY: ["3.5", "3_3.5"],
     COVERSLIP_THICKNESS_OPTIONS_KEY: ["1.5", "1.5_1.5"],
     CRANIAL_WINDOW_REGION_OPTIONS_KEY: ["S1"],
+    CS_TYPE_OPTIONS_KEY: ["Standard", "Electropor_S1"],
+    CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY: ["Cement", "3D Printed"],
 }
 
 

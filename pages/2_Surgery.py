@@ -12,6 +12,8 @@ from muronto_app.config import (
     COVERSLIP_THICKNESS_OPTIONS_KEY,
     COVERSLIP_TYPE_OPTIONS_KEY,
     CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+    CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
+    CS_TYPE_OPTIONS_KEY,
     HEADPLATE_TYPE_OPTIONS_KEY,
     LA_HOME_FOLDER_KEY,
     MEDICATION_OPTIONS_KEY,
@@ -61,8 +63,12 @@ from muronto_app.surgery import (
     COVERSLIP_TYPE_KEY,
     CRANIAL_WINDOW_IMPLANT_TYPE,
     CRANIAL_WINDOW_KEY,
+    CRYSTAL_SKULL_IMPLANT_TYPE,
+    CRYSTAL_SKULL_KEY,
+    CS_TYPE_KEY,
     DILUTION_KEY,
     DV_KEY,
+    FRONT_AP_KEY,
     HEADPLATE_TYPE_KEY,
     HEMISPHERE_KEY,
     HEMISPHERE_OPTIONS,
@@ -71,6 +77,7 @@ from muronto_app.surgery import (
     IMPLANT_TYPE_OPTIONS,
     INFUSION_RATE_NLMIN_KEY,
     INFUSION_VOLUME_NL_KEY,
+    LEFT_ML_KEY,
     ML_KEY,
     NOTES_KEY,
     POST_INFUSION_FLOW_TEST_KEY,
@@ -125,6 +132,24 @@ def render_text_guidance(text: str) -> None:
 def stable_key_part(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
     return cleaned[:48] or "value"
+
+
+def scoped_choice_options(
+    options: dict[str, list[str]],
+    options_key: str,
+    default_values: tuple[str, ...],
+    excluded_default_values: tuple[str, ...] = (),
+) -> list[str]:
+    values: list[str] = []
+    excluded = set(excluded_default_values)
+    for raw_value in (*default_values, *options.get(options_key, [])):
+        value = clean_string(raw_value)
+        if not value or value in values:
+            continue
+        if value in excluded and value not in default_values:
+            continue
+        values.append(value)
+    return [*values, OTHER_CHOICE]
 
 
 def render_surgeon_select(options: dict[str, list[str]]) -> str:
@@ -229,6 +254,14 @@ def add_reusable_surgery_option(
             if option_key == CRANIAL_WINDOW_REGION_OPTIONS_KEY
             else []
         ),
+        cs_types=(
+            [cleaned_value] if option_key == CS_TYPE_OPTIONS_KEY else []
+        ),
+        crystal_skull_well_types=(
+            [cleaned_value]
+            if option_key == CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY
+            else []
+        ),
     )
     if not changed:
         return
@@ -288,14 +321,19 @@ def render_select_with_immediate_other(
     other_prompt: str,
     notebook: Any,
     config: dict[str, Any],
+    choices: list[str] | None = None,
 ) -> str:
-    choices = choice_options(options, options_key)
+    option_choices = choices or choice_options(options, options_key)
     default_key = f"{widget_key}_default"
     default_value = clean_string(st.session_state.pop(default_key, ""))
-    index = choices.index(default_value) if default_value in choices else 0
+    index = (
+        option_choices.index(default_value)
+        if default_value in option_choices
+        else 0
+    )
     selected = st.selectbox(
         label,
-        options=choices,
+        options=option_choices,
         index=index,
         key=widget_key,
     )
@@ -803,6 +841,12 @@ def render_cranial_window_implant(
         other_prompt="New Headplate Type",
         notebook=notebook,
         config=config,
+        choices=scoped_choice_options(
+            options,
+            HEADPLATE_TYPE_OPTIONS_KEY,
+            ("Standard_Y",),
+            ("Standard_0",),
+        ),
     )
     coverslip_type = render_select_with_immediate_other(
         label="Coverslip Type",
@@ -875,6 +919,69 @@ def render_cranial_window_implant(
     }
 
 
+def render_crystal_skull_implant(
+    *,
+    procedure_index: int,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> dict[str, object]:
+    prefix = f"surgery_procedure_{procedure_index}_crystal_skull"
+    headplate_type = render_select_with_immediate_other(
+        label="Headplate Type",
+        options=options,
+        options_key=HEADPLATE_TYPE_OPTIONS_KEY,
+        widget_key=f"{prefix}_headplate_type",
+        other_prompt="New Headplate Type",
+        notebook=notebook,
+        config=config,
+        choices=scoped_choice_options(
+            options,
+            HEADPLATE_TYPE_OPTIONS_KEY,
+            ("Standard_0",),
+            ("Standard_Y",),
+        ),
+    )
+    cs_type = render_select_with_immediate_other(
+        label="CS Type",
+        options=options,
+        options_key=CS_TYPE_OPTIONS_KEY,
+        widget_key=f"{prefix}_cs_type",
+        other_prompt="New CS Type",
+        notebook=notebook,
+        config=config,
+    )
+    front_ap = st.number_input(
+        "Front AP",
+        value=None,
+        step=0.1,
+        key=f"{prefix}_front_ap",
+    )
+    left_ml = st.number_input(
+        "Left ML",
+        value=None,
+        step=0.1,
+        key=f"{prefix}_left_ml",
+    )
+    well_type = render_select_with_immediate_other(
+        label="Well Type",
+        options=options,
+        options_key=CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
+        widget_key=f"{prefix}_well_type",
+        other_prompt="New Well Type",
+        notebook=notebook,
+        config=config,
+    )
+
+    return {
+        HEADPLATE_TYPE_KEY: headplate_type,
+        CS_TYPE_KEY: cs_type,
+        FRONT_AP_KEY: front_ap,
+        LEFT_ML_KEY: left_ml,
+        WELL_TYPE_KEY: well_type,
+    }
+
+
 def render_implant_procedure(
     *,
     procedure_index: int,
@@ -887,15 +994,27 @@ def render_implant_procedure(
         SURGERY_CATEGORY_KEY: IMPLANT_CATEGORY,
         IMPLANT_TYPE_KEY: implant_type,
     }
-    if implant_type != CRANIAL_WINDOW_IMPLANT_TYPE:
-        st.info("Only Cranial Window implant fields are implemented yet.")
+    if implant_type == CRANIAL_WINDOW_IMPLANT_TYPE:
+        procedure[CRANIAL_WINDOW_KEY] = render_cranial_window_implant(
+            procedure_index=procedure_index,
+            options=options,
+            notebook=notebook,
+            config=config,
+        )
         return procedure
 
-    procedure[CRANIAL_WINDOW_KEY] = render_cranial_window_implant(
-        procedure_index=procedure_index,
-        options=options,
-        notebook=notebook,
-        config=config,
+    if implant_type == CRYSTAL_SKULL_IMPLANT_TYPE:
+        procedure[CRYSTAL_SKULL_KEY] = render_crystal_skull_implant(
+            procedure_index=procedure_index,
+            options=options,
+            notebook=notebook,
+            config=config,
+        )
+        return procedure
+
+    st.info(
+        "Only Cranial Window and Crystal Skull implant fields are "
+        "implemented yet."
     )
     return procedure
 
@@ -969,6 +1088,8 @@ def save_reusable_surgery_options(
     coverslip_diameters: list[str],
     coverslip_thicknesses: list[str],
     cranial_window_regions: list[str],
+    cs_types: list[str],
+    crystal_skull_well_types: list[str],
 ) -> None:
     updated_config, changed = with_surgery_options(
         config,
@@ -982,6 +1103,8 @@ def save_reusable_surgery_options(
         coverslip_diameters=coverslip_diameters,
         coverslip_thicknesses=coverslip_thicknesses,
         cranial_window_regions=cranial_window_regions,
+        cs_types=cs_types,
+        crystal_skull_well_types=crystal_skull_well_types,
     )
     if not changed:
         return
@@ -1112,6 +1235,8 @@ def render_surgery_form(
             coverslip_diameters,
             coverslip_thicknesses,
             cranial_window_regions,
+            cs_types,
+            crystal_skull_well_types,
         ) = procedure_option_values(payload)
         save_reusable_surgery_options(
             notebook=notebook,
@@ -1126,6 +1251,8 @@ def render_surgery_form(
             coverslip_diameters=coverslip_diameters,
             coverslip_thicknesses=coverslip_thicknesses,
             cranial_window_regions=cranial_window_regions,
+            cs_types=cs_types,
+            crystal_skull_well_types=crystal_skull_well_types,
         )
     except ApiError as exc:
         st.warning(

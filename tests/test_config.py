@@ -10,6 +10,8 @@ from muronto_app.config import (
     COVERSLIP_THICKNESS_OPTIONS_KEY,
     COVERSLIP_TYPE_OPTIONS_KEY,
     CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+    CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
+    CS_TYPE_OPTIONS_KEY,
     DEFAULT_OPTIONS,
     DEFAULT_PROJECT_ID_KEY,
     EMAIL_TO_INVESTIGATOR_KEY,
@@ -256,7 +258,7 @@ def test_validate_config_rejects_malformed_medication_options() -> None:
             ],
         ),
         (VIRUS_SOURCE_OPTIONS_KEY, ["Addgene"]),
-        (HEADPLATE_TYPE_OPTIONS_KEY, ["Standard_Y"]),
+        (HEADPLATE_TYPE_OPTIONS_KEY, ["Standard_Y", "Standard_0"]),
         (
             COVERSLIP_TYPE_OPTIONS_KEY,
             [
@@ -269,6 +271,8 @@ def test_validate_config_rejects_malformed_medication_options() -> None:
         (COVERSLIP_DIAMETER_OPTIONS_KEY, ["3.5", "3_3.5"]),
         (COVERSLIP_THICKNESS_OPTIONS_KEY, ["1.5", "1.5_1.5"]),
         (CRANIAL_WINDOW_REGION_OPTIONS_KEY, ["S1"]),
+        (CS_TYPE_OPTIONS_KEY, ["Standard", "Electropor_S1"]),
+        (CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY, ["Cement", "3D Printed"]),
     ],
 )
 def test_normalize_config_adds_missing_procedure_options(
@@ -311,6 +315,11 @@ def test_normalize_config_adds_missing_procedure_options(
         (
             CRANIAL_WINDOW_REGION_OPTIONS_KEY,
             "options.cranial_window_regions must be a list.",
+        ),
+        (CS_TYPE_OPTIONS_KEY, "options.cs_types must be a list."),
+        (
+            CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
+            "options.crystal_skill_well_types must be a list.",
         ),
     ],
 )

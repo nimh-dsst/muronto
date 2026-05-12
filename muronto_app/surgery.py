@@ -13,6 +13,8 @@ from muronto_app.config import (
     COVERSLIP_THICKNESS_OPTIONS_KEY,
     COVERSLIP_TYPE_OPTIONS_KEY,
     CRANIAL_WINDOW_REGION_OPTIONS_KEY,
+    CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
+    CS_TYPE_OPTIONS_KEY,
     HEADPLATE_TYPE_OPTIONS_KEY,
     INVESTIGATOR_KEY,
     MEDICATION_OPTIONS_KEY,
@@ -65,13 +67,17 @@ POST_INFUSION_FLOW_TEST_KEY: Final[str] = "post_infusion_flow_test"
 NOTES_KEY: Final[str] = "notes"
 IMPLANT_TYPE_KEY: Final[str] = "implant_type"
 CRANIAL_WINDOW_KEY: Final[str] = "cranial_window"
+CRYSTAL_SKULL_KEY: Final[str] = "crystal_skull"
 HEADPLATE_TYPE_KEY: Final[str] = "headplate_type"
+CS_TYPE_KEY: Final[str] = "cs_type"
 COVERSLIP_TYPE_KEY: Final[str] = "coverslip_type"
 COVERSLIP_DIAMETER_KEY: Final[str] = "coverslip_diameter"
 COVERSLIP_THICKNESS_KEY: Final[str] = "coverslip_thickness"
 REGION_KEY: Final[str] = "region"
 CENTER_AP_KEY: Final[str] = "center_ap"
 CENTER_ML_KEY: Final[str] = "center_ml"
+FRONT_AP_KEY: Final[str] = "front_ap"
+LEFT_ML_KEY: Final[str] = "left_ml"
 WELL_TYPE_KEY: Final[str] = "well_type"
 
 VIRAL_INJECTION_CATEGORY: Final[str] = "Viral Injection"
@@ -543,6 +549,54 @@ def _validate_cranial_window(
     }
 
 
+def _validate_crystal_skull(
+    raw_crystal_skull: object,
+    *,
+    field_prefix: str,
+    errors: list[str],
+) -> dict[str, str | float]:
+    crystal_skull = _raw_mapping(
+        raw_crystal_skull,
+        field_name=f"{field_prefix}.{CRYSTAL_SKULL_KEY}",
+        errors=errors,
+    )
+    if crystal_skull is None:
+        return {}
+
+    headplate_type = clean_string(crystal_skull.get(HEADPLATE_TYPE_KEY))
+    cs_type = clean_string(crystal_skull.get(CS_TYPE_KEY))
+    well_type = clean_string(crystal_skull.get(WELL_TYPE_KEY))
+    for required_key, value in (
+        (HEADPLATE_TYPE_KEY, headplate_type),
+        (CS_TYPE_KEY, cs_type),
+        (WELL_TYPE_KEY, well_type),
+    ):
+        _validate_required(
+            field_name=f"{field_prefix}.{CRYSTAL_SKULL_KEY}.{required_key}",
+            value=value,
+            errors=errors,
+        )
+
+    front_ap = _validate_number(
+        field_name=f"{field_prefix}.{CRYSTAL_SKULL_KEY}.{FRONT_AP_KEY}",
+        value=crystal_skull.get(FRONT_AP_KEY),
+        errors=errors,
+    )
+    left_ml = _validate_number(
+        field_name=f"{field_prefix}.{CRYSTAL_SKULL_KEY}.{LEFT_ML_KEY}",
+        value=crystal_skull.get(LEFT_ML_KEY),
+        errors=errors,
+    )
+
+    return {
+        HEADPLATE_TYPE_KEY: headplate_type,
+        CS_TYPE_KEY: cs_type,
+        FRONT_AP_KEY: front_ap,
+        LEFT_ML_KEY: left_ml,
+        WELL_TYPE_KEY: well_type,
+    }
+
+
 def _unsupported_implant_message(implant_type: str) -> str:
     label = implant_type or "Implant"
     return f"{label} implant procedures are not implemented yet."
@@ -563,22 +617,28 @@ def _validate_implant_procedure(
             IMPLANT_TYPE_KEY: implant_type,
         }
 
-    if implant_type != CRANIAL_WINDOW_IMPLANT_TYPE:
-        errors.append(_unsupported_implant_message(implant_type))
-        return {
-            SURGERY_CATEGORY_KEY: surgery_category,
-            IMPLANT_TYPE_KEY: implant_type,
-        }
-
-    return {
+    procedure: dict[str, object] = {
         SURGERY_CATEGORY_KEY: surgery_category,
         IMPLANT_TYPE_KEY: implant_type,
-        CRANIAL_WINDOW_KEY: _validate_cranial_window(
+    }
+    if implant_type == CRANIAL_WINDOW_IMPLANT_TYPE:
+        procedure[CRANIAL_WINDOW_KEY] = _validate_cranial_window(
             procedure_payload.get(CRANIAL_WINDOW_KEY),
             field_prefix=field_name,
             errors=errors,
-        ),
-    }
+        )
+        return procedure
+
+    if implant_type == CRYSTAL_SKULL_IMPLANT_TYPE:
+        procedure[CRYSTAL_SKULL_KEY] = _validate_crystal_skull(
+            procedure_payload.get(CRYSTAL_SKULL_KEY),
+            field_prefix=field_name,
+            errors=errors,
+        )
+        return procedure
+
+    errors.append(_unsupported_implant_message(implant_type))
+    return procedure
 
 
 def _validate_surgical_procedures(
@@ -779,11 +839,13 @@ def procedure_option_values(
     list[str],
     list[str],
     list[str],
+    list[str],
+    list[str],
 ]:
     """Return reusable surgery option values from a payload."""
     raw_procedures = payload.get(SURGICAL_PROCEDURES_KEY, [])
     if not isinstance(raw_procedures, list):
-        return [], [], [], [], [], [], [], []
+        return [], [], [], [], [], [], [], [], [], []
 
     sites: list[str] = []
     viruses: list[str] = []
@@ -793,6 +855,8 @@ def procedure_option_values(
     coverslip_diameters: list[str] = []
     coverslip_thicknesses: list[str] = []
     cranial_window_regions: list[str] = []
+    cs_types: list[str] = []
+    crystal_skull_well_types: list[str] = []
     for raw_procedure in raw_procedures:
         if not isinstance(raw_procedure, Mapping):
             continue
@@ -821,6 +885,20 @@ def procedure_option_values(
                 coverslip_thicknesses.append(coverslip_thickness)
             if region:
                 cranial_window_regions.append(region)
+
+        raw_crystal_skull = raw_procedure.get(CRYSTAL_SKULL_KEY)
+        if isinstance(raw_crystal_skull, Mapping):
+            headplate_type = clean_string(
+                raw_crystal_skull.get(HEADPLATE_TYPE_KEY)
+            )
+            cs_type = clean_string(raw_crystal_skull.get(CS_TYPE_KEY))
+            well_type = clean_string(raw_crystal_skull.get(WELL_TYPE_KEY))
+            if headplate_type:
+                headplate_types.append(headplate_type)
+            if cs_type:
+                cs_types.append(cs_type)
+            if well_type:
+                crystal_skull_well_types.append(well_type)
 
         raw_injections = raw_procedure.get(INJECTIONS_KEY, [])
         if not isinstance(raw_injections, list):
@@ -852,6 +930,8 @@ def procedure_option_values(
         coverslip_diameters,
         coverslip_thicknesses,
         cranial_window_regions,
+        cs_types,
+        crystal_skull_well_types,
     )
 
 
@@ -868,6 +948,8 @@ def with_surgery_options(
     coverslip_diameters: Iterable[str] = (),
     coverslip_thicknesses: Iterable[str] = (),
     cranial_window_regions: Iterable[str] = (),
+    cs_types: Iterable[str] = (),
+    crystal_skull_well_types: Iterable[str] = (),
 ) -> tuple[dict[str, Any], bool]:
     """Return config with reusable surgery options and whether it changed."""
     updated_config = deepcopy(dict(config))
@@ -904,6 +986,14 @@ def with_surgery_options(
             options,
             CRANIAL_WINDOW_REGION_OPTIONS_KEY,
             cranial_window_region,
+        )
+    for cs_type in cs_types:
+        add_option(options, CS_TYPE_OPTIONS_KEY, cs_type)
+    for crystal_skull_well_type in crystal_skull_well_types:
+        add_option(
+            options,
+            CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
+            crystal_skull_well_type,
         )
 
     updated_config[OPTIONS_KEY] = options
