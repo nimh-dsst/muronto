@@ -129,6 +129,9 @@ st.set_page_config(page_title="Muronto Surgery", layout="centered")
 
 SURGERY_MEDICATION_COUNT_KEY = "surgery_medication_count"
 SURGERY_PROCEDURE_COUNT_KEY = "surgery_procedure_count"
+SURGERY_TAKEN_PHOTO_COUNT_KEY = "surgery_taken_photo_count"
+SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY = "surgery_taken_photo_slot_ids"
+SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY = "surgery_taken_photo_next_slot_id"
 
 
 class PerioperativeValues(TypedDict):
@@ -150,7 +153,7 @@ class GeneralNotesAttachmentValues(TypedDict):
     general_notes: str
     note_uploads: list[Any]
     photo_uploads: list[Any]
-    taken_photo: Any | None
+    taken_photos: list[Any]
 
 
 def render_text_guidance(text: str) -> None:
@@ -181,6 +184,71 @@ def surgery_upload_filename(
         f"{animal_id}_surgery_{surgery_date}_{upload_type}_{index}_"
         f"{sanitized_original}"
     )
+
+
+def taken_photo_widget_key(slot_id: int) -> str:
+    return f"surgery_take_photo_{slot_id}"
+
+
+def current_taken_photo_slot_ids(session_state: Any) -> list[int]:
+    raw_slot_ids = session_state.get(SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY)
+    if isinstance(raw_slot_ids, list):
+        slot_ids: list[int] = []
+        for raw_slot_id in raw_slot_ids:
+            if (
+                isinstance(raw_slot_id, int)
+                and raw_slot_id > 0
+                and raw_slot_id not in slot_ids
+            ):
+                slot_ids.append(raw_slot_id)
+    else:
+        slot_ids = []
+
+    max_slot_id = max(slot_ids, default=0)
+    raw_next_slot_id = session_state.get(
+        SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY,
+    )
+    next_slot_id = (
+        raw_next_slot_id
+        if isinstance(raw_next_slot_id, int) and raw_next_slot_id > max_slot_id
+        else max_slot_id + 1
+    )
+
+    session_state[SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY] = slot_ids
+    session_state[SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY] = next_slot_id
+    session_state[SURGERY_TAKEN_PHOTO_COUNT_KEY] = len(slot_ids)
+    return slot_ids
+
+
+def add_taken_photo_slot(session_state: Any) -> None:
+    slot_ids = current_taken_photo_slot_ids(session_state)
+    raw_next_slot_id = session_state.get(
+        SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY,
+    )
+    next_slot_id = (
+        raw_next_slot_id
+        if isinstance(raw_next_slot_id, int) and raw_next_slot_id > 0
+        else max(slot_ids, default=0) + 1
+    )
+    if next_slot_id in slot_ids:
+        next_slot_id = max(slot_ids, default=0) + 1
+
+    updated_slot_ids = [*slot_ids, next_slot_id]
+    session_state[SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY] = updated_slot_ids
+    session_state[SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY] = next_slot_id + 1
+    session_state[SURGERY_TAKEN_PHOTO_COUNT_KEY] = len(updated_slot_ids)
+
+
+def remove_taken_photo_slot(session_state: Any, slot_id: int) -> None:
+    slot_ids = current_taken_photo_slot_ids(session_state)
+    updated_slot_ids = [
+        current_slot_id
+        for current_slot_id in slot_ids
+        if current_slot_id != slot_id
+    ]
+    session_state[SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY] = updated_slot_ids
+    session_state[SURGERY_TAKEN_PHOTO_COUNT_KEY] = len(updated_slot_ids)
+    session_state.pop(taken_photo_widget_key(slot_id), None)
 
 
 def scoped_choice_options(
@@ -1296,16 +1364,35 @@ def render_general_notes_attachments() -> GeneralNotesAttachmentValues:
             accept_multiple_files=True,
             key="surgery_photo_upload",
         )
-        taken_photo = st.camera_input(
-            "Take Photo",
-            key="surgery_take_photo",
-        )
+        slot_ids = current_taken_photo_slot_ids(st.session_state)
+        taken_photos: list[Any] = []
+        for photo_index, slot_id in enumerate(slot_ids, start=1):
+            if st.button(
+                f"Remove Photo {photo_index}",
+                key=f"surgery_remove_taken_photo_{slot_id}",
+            ):
+                remove_taken_photo_slot(st.session_state, slot_id)
+                st.rerun()
+
+            taken_photo = st.camera_input(
+                f"Take Photo {photo_index}",
+                key=taken_photo_widget_key(slot_id),
+            )
+            if taken_photo is not None:
+                taken_photos.append(taken_photo)
+
+        if st.button(
+            "Add photo",
+            key="surgery_add_taken_photo",
+        ):
+            add_taken_photo_slot(st.session_state)
+            st.rerun()
 
     return {
         "general_notes": general_notes,
         "note_uploads": list(note_uploads or []),
         "photo_uploads": list(photo_uploads or []),
-        "taken_photo": taken_photo,
+        "taken_photos": taken_photos,
     }
 
 
@@ -1373,12 +1460,14 @@ def save_general_surgery_attachments(
             )
         )
 
-    if attachment_values["taken_photo"] is not None:
-        taken_photo = attachment_values["taken_photo"]
+    for index, taken_photo in enumerate(
+        attachment_values["taken_photos"],
+        start=1,
+    ):
         attachment_inputs.append(
             (
                 TAKEN_PHOTO_UPLOAD_TYPE,
-                1,
+                index,
                 taken_photo,
                 "camera_capture.jpg",
                 uploaded_file_mime_type(taken_photo, "image/jpeg"),
