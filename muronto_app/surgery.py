@@ -33,9 +33,17 @@ from muronto_app.config import (
 from muronto_app.subject import ANIMAL_ID_KEY, EAR_TAG_KEY
 
 SURGERY_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery"
+SURGERY_FILE_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery_attachment"
 
 SURGEON_KEY: Final[str] = "surgeon"
 SURGERY_DATE_KEY: Final[str] = "surgery_date"
+GENERAL_NOTES_KEY: Final[str] = "general_notes"
+ATTACHMENTS_KEY: Final[str] = "attachments"
+UPLOAD_TYPE_KEY: Final[str] = "upload_type"
+ENTRY_ID_KEY: Final[str] = "entry_id"
+FILENAME_KEY: Final[str] = "filename"
+CAPTION_KEY: Final[str] = "caption"
+MIME_TYPE_KEY: Final[str] = "mime_type"
 PREOP_CNN_KEY: Final[str] = "preop_cnn"
 POSTOP_CNN_KEY: Final[str] = "postop_cnn"
 WEIGHT_PRE_G_KEY: Final[str] = "weight_pre_g"
@@ -116,6 +124,14 @@ IMPLANT_TYPE_OPTIONS: Final[tuple[str, ...]] = (
     GRIN_LENS_IMPLANT_TYPE,
 )
 WELL_TYPE_OPTIONS: Final[tuple[str, ...]] = ("Cement", "3D Printed")
+NOTE_UPLOAD_TYPE: Final[str] = "note_upload"
+PHOTO_UPLOAD_TYPE: Final[str] = "photo_upload"
+TAKEN_PHOTO_UPLOAD_TYPE: Final[str] = "taken_photo"
+SURGERY_FILE_UPLOAD_TYPES: Final[tuple[str, ...]] = (
+    NOTE_UPLOAD_TYPE,
+    PHOTO_UPLOAD_TYPE,
+    TAKEN_PHOTO_UPLOAD_TYPE,
+)
 
 CNN_PATTERN_TEXT: Final[str] = r"\d\d\d\d\d\d"
 CNN_PATTERN: Final[re.Pattern[str]] = re.compile(rf"^{CNN_PATTERN_TEXT}$")
@@ -265,6 +281,55 @@ def _validate_medications(
         errors.append(f"{MEDICATIONS_KEY} must include at least one entry.")
 
     return medications
+
+
+def _validate_attachment_references(
+    raw_attachments: Iterable[Mapping[str, object]],
+    errors: list[str],
+) -> list[dict[str, str]]:
+    attachments: list[dict[str, str]] = []
+
+    for index, raw_attachment in enumerate(raw_attachments, start=1):
+        if not isinstance(raw_attachment, Mapping):
+            errors.append(f"{ATTACHMENTS_KEY}_{index} must be an object.")
+            continue
+
+        upload_type = clean_string(raw_attachment.get(UPLOAD_TYPE_KEY))
+        entry_id = clean_string(raw_attachment.get(ENTRY_ID_KEY))
+        filename = clean_string(raw_attachment.get(FILENAME_KEY))
+        caption = clean_string(raw_attachment.get(CAPTION_KEY))
+        mime_type = clean_string(raw_attachment.get(MIME_TYPE_KEY))
+        for required_key, value in (
+            (UPLOAD_TYPE_KEY, upload_type),
+            (ENTRY_ID_KEY, entry_id),
+            (FILENAME_KEY, filename),
+            (CAPTION_KEY, caption),
+            (MIME_TYPE_KEY, mime_type),
+        ):
+            _validate_required(
+                field_name=f"{ATTACHMENTS_KEY}_{index}.{required_key}",
+                value=value,
+                errors=errors,
+            )
+
+        if upload_type and upload_type not in SURGERY_FILE_UPLOAD_TYPES:
+            errors.append(
+                f"{ATTACHMENTS_KEY}_{index}.{UPLOAD_TYPE_KEY} must be one of "
+                + ", ".join(SURGERY_FILE_UPLOAD_TYPES)
+                + "."
+            )
+
+        attachments.append(
+            {
+                UPLOAD_TYPE_KEY: upload_type,
+                ENTRY_ID_KEY: entry_id,
+                FILENAME_KEY: filename,
+                CAPTION_KEY: caption,
+                MIME_TYPE_KEY: mime_type,
+            }
+        )
+
+    return attachments
 
 
 def _raw_list(
@@ -839,6 +904,8 @@ def build_surgery_payload(
     surgery_date: date | None,
     preop_cnn: str,
     postop_cnn: str,
+    general_notes: str = "",
+    attachments: Iterable[Mapping[str, object]] = (),
     weight_pre_g: int | float | None,
     weight_post_g: int | float | None,
     medications: Iterable[Mapping[str, object]],
@@ -855,6 +922,7 @@ def build_surgery_payload(
     cleaned_surgeon = clean_string(surgeon)
     cleaned_preop_cnn = clean_string(preop_cnn)
     cleaned_postop_cnn = clean_string(postop_cnn)
+    cleaned_general_notes = clean_string(general_notes)
     errors: list[str] = []
 
     for field_name, value in (
@@ -921,6 +989,10 @@ def build_surgery_payload(
         surgical_procedures,
         errors,
     )
+    cleaned_attachments = _validate_attachment_references(
+        attachments,
+        errors,
+    )
 
     if errors:
         raise SurgeryValidationError(errors)
@@ -932,6 +1004,8 @@ def build_surgery_payload(
         EAR_TAG_KEY: cleaned_ear_tag,
         SURGEON_KEY: cleaned_surgeon,
         SURGERY_DATE_KEY: formatted_surgery_date,
+        GENERAL_NOTES_KEY: cleaned_general_notes,
+        ATTACHMENTS_KEY: cleaned_attachments,
         PREOP_CNN_KEY: cleaned_preop_cnn,
         POSTOP_CNN_KEY: cleaned_postop_cnn,
         WEIGHT_PRE_G_KEY: cleaned_weight_pre_g,

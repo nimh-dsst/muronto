@@ -24,11 +24,20 @@ from muronto_app.config import (
     VIRUS_SOURCE_OPTIONS_KEY,
 )
 from muronto_app.surgery import (
+    ATTACHMENTS_KEY,
+    CAPTION_KEY,
     CRANIAL_WINDOW_IMPLANT_TYPE,
     CRYSTAL_SKULL_IMPLANT_TYPE,
     ELECTRODE_IMPLANT_TYPE,
+    ENTRY_ID_KEY,
+    FILENAME_KEY,
+    GENERAL_NOTES_KEY,
     GRIN_LENS_IMPLANT_TYPE,
     IMPLANT_CATEGORY,
+    MIME_TYPE_KEY,
+    NOTE_UPLOAD_TYPE,
+    SURGERY_FILE_ATTACHMENT_CAPTION,
+    UPLOAD_TYPE_KEY,
     VIRAL_INJECTION_CATEGORY,
     SurgeryValidationError,
     build_surgery_payload,
@@ -179,6 +188,8 @@ def test_build_surgery_payload_formats_date_and_values() -> None:
         "ear_tag": "123",
         "surgeon": "SL",
         "surgery_date": "20260511",
+        "general_notes": "",
+        "attachments": [],
         "preop_cnn": "123456",
         "postop_cnn": "654321",
         "weight_pre_g": 25.1,
@@ -191,6 +202,32 @@ def test_build_surgery_payload_formats_date_and_values() -> None:
         "bregma_lambda_dist_mm": 4.2,
         "surgical_procedures": [valid_viral_procedure()],
     }
+
+
+def test_build_surgery_payload_supports_general_notes() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["general_notes"] = "Uneventful recovery."
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload[GENERAL_NOTES_KEY] == "Uneventful recovery."
+    assert payload[ATTACHMENTS_KEY] == []
+
+
+def test_build_surgery_payload_supports_attachment_references() -> None:
+    kwargs = valid_surgery_kwargs()
+    attachment = {
+        UPLOAD_TYPE_KEY: NOTE_UPLOAD_TYPE,
+        ENTRY_ID_KEY: "entry-1",
+        FILENAME_KEY: "123-4567_surgery_20260511_note_upload_1_notes.pdf",
+        CAPTION_KEY: SURGERY_FILE_ATTACHMENT_CAPTION,
+        MIME_TYPE_KEY: "application/pdf",
+    }
+    kwargs["attachments"] = [attachment]
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload[ATTACHMENTS_KEY] == [attachment]
 
 
 def test_build_surgery_payload_supports_multiple_procedures() -> None:
@@ -734,6 +771,32 @@ def test_build_surgery_payload_validates_medication_rows() -> None:
     assert "medication_1 is required." in exc_info.value.errors
     assert "conc_mgml_1 is required." in exc_info.value.errors
     assert "volume_1 must be non-negative." in exc_info.value.errors
+
+
+def test_build_surgery_payload_validates_attachment_references() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["attachments"] = [
+        {
+            UPLOAD_TYPE_KEY: "bad_upload",
+            ENTRY_ID_KEY: "",
+            FILENAME_KEY: "",
+            CAPTION_KEY: "",
+            MIME_TYPE_KEY: "",
+        }
+    ]
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    errors = exc_info.value.errors
+    assert "attachments_1.entry_id is required." in errors
+    assert "attachments_1.filename is required." in errors
+    assert "attachments_1.caption is required." in errors
+    assert "attachments_1.mime_type is required." in errors
+    assert (
+        "attachments_1.upload_type must be one of note_upload, photo_upload, "
+        "taken_photo."
+    ) in errors
 
 
 def test_build_surgery_payload_requires_end_after_start() -> None:

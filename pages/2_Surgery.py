@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import date, time
 from typing import Any, TypedDict
 
@@ -38,6 +39,7 @@ from muronto_app.labarchives import (
     resolve_notebook_folder,
     save_config_attachment,
     save_surgery_attachment,
+    save_surgery_file_attachment,
 )
 from muronto_app.page_helpers import render_project_context
 from muronto_app.state import (
@@ -88,7 +90,9 @@ from muronto_app.surgery import (
     INFUSION_VOLUME_NL_KEY,
     LEFT_ML_KEY,
     ML_KEY,
+    NOTE_UPLOAD_TYPE,
     NOTES_KEY,
+    PHOTO_UPLOAD_TYPE,
     PITCH_KEY,
     POST_INFUSION_FLOW_TEST_KEY,
     POST_INFUSION_FLOW_TEST_OPTIONS,
@@ -102,6 +106,8 @@ from muronto_app.surgery import (
     STOCK_TITER_PATTERN_TEXT,
     SURGERY_CATEGORY_KEY,
     SURGERY_CATEGORY_OPTIONS,
+    SURGERY_DATE_KEY,
+    TAKEN_PHOTO_UPLOAD_TYPE,
     VIRAL_INJECTION_CATEGORY,
     VIRUS_ID_KEY,
     VIRUS_KEY,
@@ -140,6 +146,13 @@ class SurgicalOptionValues(TypedDict):
     virus_sources: list[str]
 
 
+class GeneralNotesAttachmentValues(TypedDict):
+    general_notes: str
+    note_uploads: list[Any]
+    photo_uploads: list[Any]
+    taken_photo: Any | None
+
+
 def render_text_guidance(text: str) -> None:
     st.markdown(text)
 
@@ -147,6 +160,27 @@ def render_text_guidance(text: str) -> None:
 def stable_key_part(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
     return cleaned[:48] or "value"
+
+
+def sanitize_upload_filename(filename: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", clean_string(filename))
+    cleaned = cleaned.strip("._-")
+    return cleaned or "upload"
+
+
+def surgery_upload_filename(
+    *,
+    animal_id: str,
+    surgery_date: str,
+    upload_type: str,
+    index: int,
+    original_filename: str,
+) -> str:
+    sanitized_original = sanitize_upload_filename(original_filename)
+    return (
+        f"{animal_id}_surgery_{surgery_date}_{upload_type}_{index}_"
+        f"{sanitized_original}"
+    )
 
 
 def scoped_choice_options(
@@ -1245,6 +1279,142 @@ def render_surgical_procedures(
     return procedures
 
 
+def render_general_notes_attachments() -> GeneralNotesAttachmentValues:
+    with st.expander("General Notes & Attachments", expanded=True):
+        general_notes = st.text_area(
+            "General Notes",
+            key="surgery_general_notes",
+        )
+        note_uploads = st.file_uploader(
+            "Note Upload",
+            accept_multiple_files=True,
+            key="surgery_note_upload",
+        )
+        photo_uploads = st.file_uploader(
+            "Photo Upload",
+            type=["png", "jpg", "jpeg", "tif", "tiff"],
+            accept_multiple_files=True,
+            key="surgery_photo_upload",
+        )
+        taken_photo = st.camera_input(
+            "Take Photo",
+            key="surgery_take_photo",
+        )
+
+    return {
+        "general_notes": general_notes,
+        "note_uploads": list(note_uploads or []),
+        "photo_uploads": list(photo_uploads or []),
+        "taken_photo": taken_photo,
+    }
+
+
+def uploaded_file_name(uploaded_file: Any, default_filename: str) -> str:
+    return clean_string(getattr(uploaded_file, "name", "")) or default_filename
+
+
+def uploaded_file_mime_type(uploaded_file: Any, default_mime_type: str) -> str:
+    return (
+        clean_string(getattr(uploaded_file, "type", "")) or default_mime_type
+    )
+
+
+def uploaded_file_bytes(uploaded_file: Any) -> bytes:
+    getvalue = getattr(uploaded_file, "getvalue", None)
+    if callable(getvalue):
+        return bytes(getvalue())
+
+    seek = getattr(uploaded_file, "seek", None)
+    if callable(seek):
+        seek(0)
+    read = getattr(uploaded_file, "read", None)
+    if callable(read):
+        return bytes(read())
+    raise ValueError("Uploaded file could not be read.")
+
+
+def save_general_surgery_attachments(
+    *,
+    page: Any,
+    payload: Mapping[str, Any],
+    attachment_values: GeneralNotesAttachmentValues,
+) -> list[dict[str, str]]:
+    animal_id = clean_string(payload.get(ANIMAL_ID_KEY))
+    surgery_date = clean_string(payload.get(SURGERY_DATE_KEY))
+    attachment_inputs: list[tuple[str, int, Any, str, str]] = []
+
+    for index, uploaded_file in enumerate(
+        attachment_values["note_uploads"],
+        start=1,
+    ):
+        attachment_inputs.append(
+            (
+                NOTE_UPLOAD_TYPE,
+                index,
+                uploaded_file,
+                uploaded_file_name(uploaded_file, "note_upload"),
+                uploaded_file_mime_type(
+                    uploaded_file,
+                    "application/octet-stream",
+                ),
+            )
+        )
+    for index, uploaded_file in enumerate(
+        attachment_values["photo_uploads"],
+        start=1,
+    ):
+        attachment_inputs.append(
+            (
+                PHOTO_UPLOAD_TYPE,
+                index,
+                uploaded_file,
+                uploaded_file_name(uploaded_file, "photo_upload"),
+                uploaded_file_mime_type(uploaded_file, "image/jpeg"),
+            )
+        )
+
+    if attachment_values["taken_photo"] is not None:
+        taken_photo = attachment_values["taken_photo"]
+        attachment_inputs.append(
+            (
+                TAKEN_PHOTO_UPLOAD_TYPE,
+                1,
+                taken_photo,
+                "camera_capture.jpg",
+                uploaded_file_mime_type(taken_photo, "image/jpeg"),
+            )
+        )
+
+    references: list[dict[str, str]] = []
+    for (
+        upload_type,
+        index,
+        uploaded_file,
+        original_filename,
+        mime_type,
+    ) in attachment_inputs:
+        filename = surgery_upload_filename(
+            animal_id=animal_id,
+            surgery_date=surgery_date,
+            upload_type=upload_type,
+            index=index,
+            original_filename=original_filename,
+        )
+        try:
+            result = save_surgery_file_attachment(
+                page,
+                payload=uploaded_file_bytes(uploaded_file),
+                filename=filename,
+                mime_type=mime_type,
+                upload_type=upload_type,
+            )
+        except (ApiError, ValueError) as exc:
+            raise ValueError(f"{filename}: {exc}") from exc
+        references.append(result.reference)
+
+    return references
+
+
 def save_reusable_surgery_options(
     *,
     notebook: Any,
@@ -1356,6 +1526,7 @@ def render_surgery_form(
         notebook=notebook,
         config=config,
     )
+    general_attachment_values = render_general_notes_attachments()
 
     submitted = st.button(
         "Save surgery record",
@@ -1365,8 +1536,10 @@ def render_surgery_form(
     if not submitted:
         return
 
-    try:
-        payload = build_surgery_payload(
+    def build_payload(
+        attachments: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        return build_surgery_payload(
             project_id=project[PROJECT_ID_KEY],
             investigator=investigator,
             animal_id=subject_payload.get(ANIMAL_ID_KEY, ""),
@@ -1375,6 +1548,8 @@ def render_surgery_form(
             surgery_date=surgery_date,
             preop_cnn=preop_cnn,
             postop_cnn=postop_cnn,
+            general_notes=general_attachment_values["general_notes"],
+            attachments=attachments,
             weight_pre_g=perioperative_values["weight_pre_g"],
             weight_post_g=perioperative_values["weight_post_g"],
             medications=perioperative_values["medications"],
@@ -1385,10 +1560,29 @@ def render_surgery_form(
             ],
             surgical_procedures=surgical_procedures,
         )
+
+    try:
+        payload = build_payload([])
     except SurgeryValidationError as exc:
         st.error("Complete the surgery form before saving the record.")
         for error in exc.errors:
             st.caption(error)
+        return
+
+    try:
+        attachment_references = save_general_surgery_attachments(
+            page=selected_subject.page,
+            payload=payload,
+            attachment_values=general_attachment_values,
+        )
+        payload = build_payload(attachment_references)
+    except SurgeryValidationError as exc:
+        st.error("Complete the surgery form before saving the record.")
+        for error in exc.errors:
+            st.caption(error)
+        return
+    except ValueError as exc:
+        st.error(f"Unable to upload surgery attachment: {exc}")
         return
 
     try:

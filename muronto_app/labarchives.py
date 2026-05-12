@@ -32,8 +32,15 @@ from muronto_app.subject import (
     subject_json_filename,
 )
 from muronto_app.surgery import (
+    CAPTION_KEY,
+    ENTRY_ID_KEY,
+    FILENAME_KEY,
+    MIME_TYPE_KEY,
     SURGERY_ATTACHMENT_CAPTION,
     SURGERY_DATE_KEY,
+    SURGERY_FILE_ATTACHMENT_CAPTION,
+    SURGERY_FILE_UPLOAD_TYPES,
+    UPLOAD_TYPE_KEY,
     surgery_json_filename,
 )
 
@@ -69,6 +76,16 @@ class SurgeryWriteResult:
 
     page: Any
     attachment_entry: Any
+    created: bool
+
+
+@dataclass(frozen=True)
+class SurgeryFileAttachmentWriteResult:
+    """Result of writing a surgery support-file attachment."""
+
+    page: Any
+    attachment_entry: Any
+    reference: dict[str, str]
     created: bool
 
 
@@ -122,6 +139,21 @@ def _json_attachment_content(
     return Attachment(
         BytesIO(raw_payload),
         "application/json",
+        filename,
+        caption,
+    )
+
+
+def _file_attachment_content(
+    payload: bytes,
+    *,
+    filename: str,
+    caption: str,
+    mime_type: str,
+) -> Attachment:
+    return Attachment(
+        BytesIO(payload),
+        mime_type,
         filename,
         caption,
     )
@@ -408,6 +440,76 @@ def save_surgery_attachment(
         page=page,
         attachment_entry=attachment_entry,
         created=True,
+    )
+
+
+def find_surgery_file_attachment(page: Any, filename: str) -> Any | None:
+    """Return an existing surgery support-file attachment by filename."""
+    for entry in page.entries:
+        if not is_attachment_entry(entry):
+            continue
+        if attachment_matches_filename_and_caption(
+            entry,
+            filename=filename,
+            caption=SURGERY_FILE_ATTACHMENT_CAPTION,
+        ):
+            return entry
+    return None
+
+
+def save_surgery_file_attachment(
+    page: Any,
+    *,
+    payload: bytes,
+    filename: str,
+    mime_type: str,
+    upload_type: str,
+) -> SurgeryFileAttachmentWriteResult:
+    """Create or update a surgery support-file attachment on a subject page."""
+    cleaned_filename = clean_string(filename)
+    cleaned_mime_type = clean_string(mime_type)
+    cleaned_upload_type = clean_string(upload_type)
+    if not cleaned_filename:
+        raise ValueError("filename is required.")
+    if not cleaned_mime_type:
+        raise ValueError("mime_type is required.")
+    if cleaned_upload_type not in SURGERY_FILE_UPLOAD_TYPES:
+        raise ValueError(
+            "upload_type must be one of "
+            + ", ".join(SURGERY_FILE_UPLOAD_TYPES)
+            + "."
+        )
+
+    attachment = _file_attachment_content(
+        payload,
+        filename=cleaned_filename,
+        caption=SURGERY_FILE_ATTACHMENT_CAPTION,
+        mime_type=cleaned_mime_type,
+    )
+    existing_entry = find_surgery_file_attachment(page, cleaned_filename)
+    if existing_entry is not None:
+        existing_entry.content = attachment
+        entry = existing_entry
+        created = False
+    else:
+        entry = page.entries.create(AttachmentEntry, attachment)
+        created = True
+
+    entry_id = clean_string(getattr(entry, "id", ""))
+    if not entry_id:
+        raise ValueError("Uploaded attachment entry did not include an id.")
+
+    return SurgeryFileAttachmentWriteResult(
+        page=page,
+        attachment_entry=entry,
+        reference={
+            UPLOAD_TYPE_KEY: cleaned_upload_type,
+            ENTRY_ID_KEY: entry_id,
+            FILENAME_KEY: cleaned_filename,
+            CAPTION_KEY: SURGERY_FILE_ATTACHMENT_CAPTION,
+            MIME_TYPE_KEY: cleaned_mime_type,
+        },
+        created=created,
     )
 
 

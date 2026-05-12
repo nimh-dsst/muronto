@@ -33,13 +33,23 @@ from muronto_app.labarchives import (
     resolve_notebook_folder,
     save_config_attachment,
     save_surgery_attachment,
+    save_surgery_file_attachment,
 )
 from muronto_app.subject import (
     ANIMAL_ID_KEY,
     EAR_TAG_KEY,
     SUBJECT_ATTACHMENT_CAPTION,
 )
-from muronto_app.surgery import SURGERY_ATTACHMENT_CAPTION
+from muronto_app.surgery import (
+    CAPTION_KEY,
+    ENTRY_ID_KEY,
+    FILENAME_KEY,
+    MIME_TYPE_KEY,
+    NOTE_UPLOAD_TYPE,
+    SURGERY_ATTACHMENT_CAPTION,
+    SURGERY_FILE_ATTACHMENT_CAPTION,
+    UPLOAD_TYPE_KEY,
+)
 
 
 class FakeAttachment:
@@ -65,19 +75,22 @@ class FakeAttachment:
 class FakeEntry:
     def __init__(
         self,
-        payload: dict[str, Any] | str,
+        payload: dict[str, Any] | str | bytes,
         *,
         caption: str = CONFIG_CAPTION,
+        entry_id: str = "entry-id",
         filename: str = CONFIG_FILENAME,
     ) -> None:
+        self.id = entry_id
         self.caption = caption
         self.filename = filename
         self.updated_content: Any | None = None
-        raw_payload = (
-            payload.encode("utf-8")
-            if isinstance(payload, str)
-            else json.dumps(payload).encode("utf-8")
-        )
+        if isinstance(payload, bytes):
+            raw_payload = payload
+        elif isinstance(payload, str):
+            raw_payload = payload.encode("utf-8")
+        else:
+            raw_payload = json.dumps(payload).encode("utf-8")
         self.attachment = FakeAttachment(
             raw_payload,
             filename=filename,
@@ -100,6 +113,7 @@ class FakeEntries(list[FakeEntry]):
     def __init__(self, entries: list[FakeEntry]) -> None:
         super().__init__(entries)
         self.created: tuple[dict[str, Any], str, str] | None = None
+        self.created_attachment: tuple[bytes, str, str, str] | None = None
 
     def create_json_entry(
         self,
@@ -112,6 +126,32 @@ class FakeEntries(list[FakeEntry]):
         entry = FakeEntry(config, filename=filename, caption=caption)
         self.append(entry)
         return entry, object()
+
+    def create(
+        self,
+        _cls: Any,
+        attachment: Any,
+        *,
+        client_ip: str | None = None,
+    ) -> FakeEntry:
+        del client_ip
+        attachment.seek(0)
+        raw_payload = attachment.read()
+        attachment.seek(0)
+        self.created_attachment = (
+            raw_payload,
+            attachment.filename,
+            attachment.caption,
+            attachment.mime_type,
+        )
+        entry = FakeEntry(
+            raw_payload,
+            filename=attachment.filename,
+            caption=attachment.caption,
+            entry_id=f"entry-{len(self) + 1}",
+        )
+        self.append(entry)
+        return entry
 
 
 class FakePage:
@@ -391,3 +431,61 @@ def test_save_surgery_attachment_creates_and_updates_by_filename() -> None:
     assert (
         page.entries[0].updated_content.caption == SURGERY_ATTACHMENT_CAPTION
     )
+
+
+def test_save_surgery_file_attachment_creates_reference() -> None:
+    page = FakePage([], name="123-4567")
+
+    result = save_surgery_file_attachment(
+        page,
+        payload=b"notes",
+        filename="123-4567_surgery_20260511_note_upload_1_notes.pdf",
+        mime_type="application/pdf",
+        upload_type=NOTE_UPLOAD_TYPE,
+    )
+
+    assert result.created
+    assert result.attachment_entry is page.entries[-1]
+    assert page.entries.created_attachment == (
+        b"notes",
+        "123-4567_surgery_20260511_note_upload_1_notes.pdf",
+        SURGERY_FILE_ATTACHMENT_CAPTION,
+        "application/pdf",
+    )
+    assert result.reference == {
+        UPLOAD_TYPE_KEY: NOTE_UPLOAD_TYPE,
+        ENTRY_ID_KEY: "entry-1",
+        FILENAME_KEY: "123-4567_surgery_20260511_note_upload_1_notes.pdf",
+        CAPTION_KEY: SURGERY_FILE_ATTACHMENT_CAPTION,
+        MIME_TYPE_KEY: "application/pdf",
+    }
+
+
+def test_save_surgery_file_attachment_updates_existing_match() -> None:
+    entry = FakeEntry(
+        b"old notes",
+        filename="123-4567_surgery_20260511_note_upload_1_notes.pdf",
+        caption=SURGERY_FILE_ATTACHMENT_CAPTION,
+        entry_id="existing-entry",
+    )
+    page = FakePage([entry], name="123-4567")
+
+    result = save_surgery_file_attachment(
+        page,
+        payload=b"new notes",
+        filename="123-4567_surgery_20260511_note_upload_1_notes.pdf",
+        mime_type="application/pdf",
+        upload_type=NOTE_UPLOAD_TYPE,
+    )
+
+    assert not result.created
+    assert result.attachment_entry is entry
+    assert len(page.entries) == 1
+    assert entry.updated_content is not None
+    assert entry.updated_content.filename == (
+        "123-4567_surgery_20260511_note_upload_1_notes.pdf"
+    )
+    assert entry.updated_content.caption == SURGERY_FILE_ATTACHMENT_CAPTION
+    assert entry.updated_content.mime_type == "application/pdf"
+    assert entry.updated_content.read() == b"new notes"
+    assert result.reference[ENTRY_ID_KEY] == "existing-entry"
