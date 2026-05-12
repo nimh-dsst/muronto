@@ -14,11 +14,13 @@ from muronto_app.config import (
     CRANIAL_WINDOW_REGION_OPTIONS_KEY,
     CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
     CS_TYPE_OPTIONS_KEY,
+    ELECTRODE_SITE_OPTIONS_KEY,
     HEADPLATE_TYPE_OPTIONS_KEY,
     LA_HOME_FOLDER_KEY,
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
     OTHER_CHOICE,
+    PROBE_MODEL_OPTIONS_KEY,
     PROJECT_ID_KEY,
     SITE_OPTIONS_KEY,
     SURGEON_OPTIONS_KEY,
@@ -68,7 +70,14 @@ from muronto_app.surgery import (
     CS_TYPE_KEY,
     DILUTION_KEY,
     DV_KEY,
+    ELECTRODE_HEMISPHERE_KEY,
+    ELECTRODE_IMPLANT_TYPE,
+    ELECTRODE_SITE_KEY,
+    ELECTRODE_TYPE_KEY,
+    ELECTRODE_TYPE_OPTIONS,
+    ELECTRODES_KEY,
     FRONT_AP_KEY,
+    GROUND_KEY,
     HEADPLATE_TYPE_KEY,
     HEMISPHERE_KEY,
     HEMISPHERE_OPTIONS,
@@ -80,9 +89,14 @@ from muronto_app.surgery import (
     LEFT_ML_KEY,
     ML_KEY,
     NOTES_KEY,
+    PITCH_KEY,
     POST_INFUSION_FLOW_TEST_KEY,
     POST_INFUSION_FLOW_TEST_OPTIONS,
+    PROBE_ID_KEY,
+    PROBE_MODEL_KEY,
+    REFERENCE_KEY,
     REGION_KEY,
+    ROLL_KEY,
     SITE_KEY,
     STOCK_TITER_KEY,
     STOCK_TITER_PATTERN_TEXT,
@@ -95,6 +109,7 @@ from muronto_app.surgery import (
     VIRUS_STOCK_KEY,
     WELL_TYPE_KEY,
     WELL_TYPE_OPTIONS,
+    YAW_KEY,
     SurgeryValidationError,
     build_surgery_payload,
     format_surgery_date,
@@ -261,6 +276,12 @@ def add_reusable_surgery_option(
             [cleaned_value]
             if option_key == CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY
             else []
+        ),
+        probe_models=(
+            [cleaned_value] if option_key == PROBE_MODEL_OPTIONS_KEY else []
+        ),
+        electrode_sites=(
+            [cleaned_value] if option_key == ELECTRODE_SITE_OPTIONS_KEY else []
         ),
     )
     if not changed:
@@ -563,8 +584,17 @@ def injection_infusion_count_key(
     )
 
 
+def procedure_electrode_count_key(procedure_index: int) -> str:
+    return f"surgery_procedure_{procedure_index}_electrode_count"
+
+
 def increment_injection_count(procedure_index: int) -> None:
     count_key = procedure_injection_count_key(procedure_index)
+    st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+
+
+def increment_electrode_count(procedure_index: int) -> None:
+    count_key = procedure_electrode_count_key(procedure_index)
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
 
 
@@ -982,6 +1012,138 @@ def render_crystal_skull_implant(
     }
 
 
+def render_electrode_object(
+    *,
+    procedure_index: int,
+    electrode_index: int,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> dict[str, object]:
+    prefix = f"surgery_procedure_{procedure_index}_electrode_{electrode_index}"
+    st.markdown(f"#### Electrode {electrode_index}")
+    electrode_type = st.selectbox(
+        "Electrode Type",
+        options=ELECTRODE_TYPE_OPTIONS,
+        key=f"{prefix}_electrode_type",
+    )
+    probe_model = render_select_with_immediate_other(
+        label="Probe Model",
+        options=options,
+        options_key=PROBE_MODEL_OPTIONS_KEY,
+        widget_key=f"{prefix}_probe_model",
+        other_prompt="New Probe Model",
+        notebook=notebook,
+        config=config,
+    )
+    probe_id = st.text_input(
+        "Probe ID",
+        key=f"{prefix}_probe_id",
+    )
+    electrode_site = render_select_with_immediate_other(
+        label="Electrode Site",
+        options=options,
+        options_key=ELECTRODE_SITE_OPTIONS_KEY,
+        widget_key=f"{prefix}_electrode_site",
+        other_prompt="New Electrode Site",
+        notebook=notebook,
+        config=config,
+    )
+    electrode_hemisphere = st.selectbox(
+        "Electrode Hemisphere",
+        options=HEMISPHERE_OPTIONS,
+        key=f"{prefix}_electrode_hemisphere",
+    )
+    pitch = st.text_input(
+        "Pitch",
+        key=f"{prefix}_pitch",
+    )
+    yaw = st.text_input(
+        "Yaw",
+        key=f"{prefix}_yaw",
+    )
+    roll = st.text_input(
+        "Roll",
+        key=f"{prefix}_roll",
+    )
+    ap = st.number_input(
+        "AP",
+        value=None,
+        step=0.1,
+        key=f"{prefix}_ap",
+    )
+    ml = st.number_input(
+        "ML",
+        value=None,
+        step=0.1,
+        key=f"{prefix}_ml",
+    )
+    dv = st.number_input(
+        "DV",
+        value=None,
+        step=0.1,
+        key=f"{prefix}_dv",
+    )
+    ground = st.text_input(
+        "Ground",
+        key=f"{prefix}_ground",
+    )
+    reference = st.text_input(
+        "Reference",
+        key=f"{prefix}_reference",
+    )
+    notes = st.text_input(
+        "Notes",
+        key=f"{prefix}_notes",
+    )
+
+    return {
+        ELECTRODE_TYPE_KEY: electrode_type,
+        PROBE_MODEL_KEY: probe_model,
+        PROBE_ID_KEY: probe_id,
+        ELECTRODE_SITE_KEY: electrode_site,
+        ELECTRODE_HEMISPHERE_KEY: electrode_hemisphere,
+        PITCH_KEY: pitch,
+        YAW_KEY: yaw,
+        ROLL_KEY: roll,
+        AP_KEY: ap,
+        ML_KEY: ml,
+        DV_KEY: dv,
+        GROUND_KEY: ground,
+        REFERENCE_KEY: reference,
+        NOTES_KEY: notes,
+    }
+
+
+def render_electrode_implant(
+    *,
+    procedure_index: int,
+    options: dict[str, list[str]],
+    notebook: Any,
+    config: dict[str, Any],
+) -> list[dict[str, object]]:
+    count_key = procedure_electrode_count_key(procedure_index)
+    st.session_state.setdefault(count_key, 1)
+    if st.button(
+        "Add electrode",
+        key=f"surgery_procedure_{procedure_index}_add_electrode",
+        use_container_width=True,
+    ):
+        increment_electrode_count(procedure_index)
+        st.rerun()
+
+    return [
+        render_electrode_object(
+            procedure_index=procedure_index,
+            electrode_index=electrode_index,
+            options=options,
+            notebook=notebook,
+            config=config,
+        )
+        for electrode_index in range(1, st.session_state[count_key] + 1)
+    ]
+
+
 def render_implant_procedure(
     *,
     procedure_index: int,
@@ -1012,8 +1174,17 @@ def render_implant_procedure(
         )
         return procedure
 
+    if implant_type == ELECTRODE_IMPLANT_TYPE:
+        procedure[ELECTRODES_KEY] = render_electrode_implant(
+            procedure_index=procedure_index,
+            options=options,
+            notebook=notebook,
+            config=config,
+        )
+        return procedure
+
     st.info(
-        "Only Cranial Window and Crystal Skull implant fields are "
+        "Only Cranial Window, Crystal Skull, and Electrode implant fields are "
         "implemented yet."
     )
     return procedure
@@ -1090,6 +1261,8 @@ def save_reusable_surgery_options(
     cranial_window_regions: list[str],
     cs_types: list[str],
     crystal_skull_well_types: list[str],
+    probe_models: list[str],
+    electrode_sites: list[str],
 ) -> None:
     updated_config, changed = with_surgery_options(
         config,
@@ -1105,6 +1278,8 @@ def save_reusable_surgery_options(
         cranial_window_regions=cranial_window_regions,
         cs_types=cs_types,
         crystal_skull_well_types=crystal_skull_well_types,
+        probe_models=probe_models,
+        electrode_sites=electrode_sites,
     )
     if not changed:
         return
@@ -1237,6 +1412,8 @@ def render_surgery_form(
             cranial_window_regions,
             cs_types,
             crystal_skull_well_types,
+            probe_models,
+            electrode_sites,
         ) = procedure_option_values(payload)
         save_reusable_surgery_options(
             notebook=notebook,
@@ -1253,6 +1430,8 @@ def render_surgery_form(
             cranial_window_regions=cranial_window_regions,
             cs_types=cs_types,
             crystal_skull_well_types=crystal_skull_well_types,
+            probe_models=probe_models,
+            electrode_sites=electrode_sites,
         )
     except ApiError as exc:
         st.warning(

@@ -13,9 +13,11 @@ from muronto_app.config import (
     CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
     CS_TYPE_OPTIONS_KEY,
     DEFAULT_OPTIONS,
+    ELECTRODE_SITE_OPTIONS_KEY,
     HEADPLATE_TYPE_OPTIONS_KEY,
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
+    PROBE_MODEL_OPTIONS_KEY,
     SITE_OPTIONS_KEY,
     SURGEON_OPTIONS_KEY,
     VIRUS_OPTIONS_KEY,
@@ -102,6 +104,31 @@ def valid_crystal_skull_procedure() -> dict[str, object]:
             "left_ml": 2.0,
             "well_type": "Cement",
         },
+    }
+
+
+def valid_electrode_procedure() -> dict[str, object]:
+    return {
+        "surgery_category": IMPLANT_CATEGORY,
+        "implant_type": ELECTRODE_IMPLANT_TYPE,
+        "electrodes": [
+            {
+                "electrode_type": "NeuroPixels",
+                "probe_model": "Alpha",
+                "probe_id": "NP-001",
+                "electrode_site": "S1",
+                "electrode_hemisphere": "LH",
+                "pitch": "0",
+                "yaw": "0",
+                "roll": "0",
+                "ap": 1.0,
+                "ml": 2.0,
+                "dv": -3.0,
+                "ground": "skull screw",
+                "reference": "reference wire",
+                "notes": "",
+            }
+        ],
     }
 
 
@@ -225,23 +252,67 @@ def test_build_surgery_payload_supports_crystal_skull_implant() -> None:
     assert payload["surgical_procedures"] == [valid_crystal_skull_procedure()]
 
 
+def test_build_surgery_payload_supports_electrode_implant() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [valid_electrode_procedure()]
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload["surgical_procedures"] == [valid_electrode_procedure()]
+
+
 def test_build_surgery_payload_supports_mixed_procedure_types() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["surgical_procedures"] = [
         valid_viral_procedure(),
         valid_cranial_window_procedure(),
         valid_crystal_skull_procedure(),
+        valid_electrode_procedure(),
     ]
 
     payload = build_surgery_payload(**kwargs)
 
-    assert len(payload["surgical_procedures"]) == 3
+    assert len(payload["surgical_procedures"]) == 4
     assert payload["surgical_procedures"][1]["implant_type"] == (
         CRANIAL_WINDOW_IMPLANT_TYPE
     )
     assert payload["surgical_procedures"][2]["implant_type"] == (
         CRYSTAL_SKULL_IMPLANT_TYPE
     )
+    assert payload["surgical_procedures"][3]["implant_type"] == (
+        ELECTRODE_IMPLANT_TYPE
+    )
+
+
+def test_build_surgery_payload_supports_multiple_electrodes() -> None:
+    kwargs = valid_surgery_kwargs()
+    procedure = valid_electrode_procedure()
+    procedure["electrodes"] = [
+        *procedure["electrodes"],  # type: ignore[misc]
+        {
+            "electrode_type": "NeuroNexus",
+            "probe_model": "Beta",
+            "probe_id": "NN-002",
+            "electrode_site": "M1",
+            "electrode_hemisphere": "RH",
+            "pitch": "10",
+            "yaw": "20",
+            "roll": "30",
+            "ap": -1.0,
+            "ml": 1.5,
+            "dv": -2.5,
+            "ground": "ground wire",
+            "reference": "reference screw",
+            "notes": "second electrode",
+        },
+    ]
+    kwargs["surgical_procedures"] = [procedure]
+
+    payload = build_surgery_payload(**kwargs)
+
+    electrodes = payload["surgical_procedures"][0]["electrodes"]
+    assert len(electrodes) == 2
+    assert electrodes[1]["electrode_site"] == "M1"
 
 
 def test_build_surgery_payload_supports_multiple_injections() -> None:
@@ -322,6 +393,8 @@ def test_build_surgery_payload_supports_multiple_viruses() -> None:
         ["S1"],
         ["AAV1-hSynapsin1-axon-GCaMP6s", "AAV1-EF1a-fDIO-jRGECO1a"],
         ["Addgene", "Custom Source"],
+        [],
+        [],
         [],
         [],
         [],
@@ -412,7 +485,6 @@ def test_build_surgery_payload_requires_surgical_procedures() -> None:
 @pytest.mark.parametrize(
     "implant_type",
     [
-        ELECTRODE_IMPLANT_TYPE,
         GRIN_LENS_IMPLANT_TYPE,
         "Custom Implant",
     ],
@@ -536,6 +608,65 @@ def test_build_surgery_payload_validates_crystal_skull_fields() -> None:
         errors
     )
     assert "surgical_procedures_1.crystal_skull.well_type is required." in (
+        errors
+    )
+
+
+def test_build_surgery_payload_validates_electrode_fields() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [
+        {
+            "surgery_category": IMPLANT_CATEGORY,
+            "implant_type": ELECTRODE_IMPLANT_TYPE,
+            "electrodes": [
+                {
+                    "electrode_type": "Unknown",
+                    "probe_model": "",
+                    "probe_id": "",
+                    "electrode_site": "",
+                    "electrode_hemisphere": "Both",
+                    "pitch": "",
+                    "yaw": "",
+                    "roll": "",
+                    "ap": None,
+                    "ml": None,
+                    "dv": None,
+                    "ground": "",
+                    "reference": "",
+                    "notes": "",
+                }
+            ],
+        }
+    ]
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    errors = exc_info.value.errors
+    assert (
+        "surgical_procedures_1.electrodes_1.electrode_type must be one of "
+        "NeuroPixels, NeuroNexus."
+    ) in errors
+    assert "surgical_procedures_1.electrodes_1.probe_model is required." in (
+        errors
+    )
+    assert "surgical_procedures_1.electrodes_1.probe_id is required." in errors
+    assert (
+        "surgical_procedures_1.electrodes_1.electrode_site is required."
+        in errors
+    )
+    assert (
+        "surgical_procedures_1.electrodes_1.electrode_hemisphere must be one "
+        "of LH, RH."
+    ) in errors
+    assert "surgical_procedures_1.electrodes_1.pitch is required." in errors
+    assert "surgical_procedures_1.electrodes_1.yaw is required." in errors
+    assert "surgical_procedures_1.electrodes_1.roll is required." in errors
+    assert "surgical_procedures_1.electrodes_1.ap is required." in errors
+    assert "surgical_procedures_1.electrodes_1.ml is required." in errors
+    assert "surgical_procedures_1.electrodes_1.dv is required." in errors
+    assert "surgical_procedures_1.electrodes_1.ground is required." in errors
+    assert "surgical_procedures_1.electrodes_1.reference is required." in (
         errors
     )
 
@@ -674,6 +805,8 @@ def test_with_surgery_options_persists_custom_implant_options() -> None:
         cranial_window_regions=["Custom-Region"],
         cs_types=["Custom-CS"],
         crystal_skull_well_types=["Custom-Well"],
+        probe_models=["Custom-Probe"],
+        electrode_sites=["Custom-Electrode-Site"],
     )
 
     assert changed
@@ -698,6 +831,13 @@ def test_with_surgery_options_persists_custom_implant_options() -> None:
         "Custom-Well"
         in updated_config[OPTIONS_KEY][CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY]
     )
+    assert (
+        "Custom-Probe" in updated_config[OPTIONS_KEY][PROBE_MODEL_OPTIONS_KEY]
+    )
+    assert (
+        "Custom-Electrode-Site"
+        in updated_config[OPTIONS_KEY][ELECTRODE_SITE_OPTIONS_KEY]
+    )
 
 
 def test_procedure_option_values_returns_implant_options() -> None:
@@ -714,6 +854,8 @@ def test_procedure_option_values_returns_implant_options() -> None:
         ["3.5"],
         ["1.5"],
         ["S1"],
+        [],
+        [],
         [],
         [],
     )
@@ -735,6 +877,29 @@ def test_procedure_option_values_returns_crystal_skull_options() -> None:
         [],
         ["Standard"],
         ["Cement"],
+        [],
+        [],
+    )
+
+
+def test_procedure_option_values_returns_electrode_options() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgical_procedures"] = [valid_electrode_procedure()]
+    payload = build_surgery_payload(**kwargs)
+
+    assert procedure_option_values(payload) == (
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        ["Alpha"],
+        ["S1"],
     )
 
 

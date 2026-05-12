@@ -39,6 +39,8 @@ COVERSLIP_THICKNESS_OPTIONS_KEY: Final[str] = "coverslip_thicknesses"
 CRANIAL_WINDOW_REGION_OPTIONS_KEY: Final[str] = "cranial_window_regions"
 CS_TYPE_OPTIONS_KEY: Final[str] = "cs_types"
 CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY: Final[str] = "crystal_skill_well_types"
+PROBE_MODEL_OPTIONS_KEY: Final[str] = "probe_models"
+ELECTRODE_SITE_OPTIONS_KEY: Final[str] = "electrode_sites"
 
 PROJECT_VALUE_KEYS: Final[tuple[str, ...]] = (
     PROJECT_ID_KEY,
@@ -74,6 +76,8 @@ SURGERY_OPTION_KEYS: Final[tuple[str, ...]] = (
     CRANIAL_WINDOW_REGION_OPTIONS_KEY,
     CS_TYPE_OPTIONS_KEY,
     CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
+    PROBE_MODEL_OPTIONS_KEY,
+    ELECTRODE_SITE_OPTIONS_KEY,
 )
 
 OPTION_KEYS: Final[tuple[str, ...]] = (
@@ -174,6 +178,16 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
     CRANIAL_WINDOW_REGION_OPTIONS_KEY: ["S1"],
     CS_TYPE_OPTIONS_KEY: ["Standard", "Electropor_S1"],
     CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY: ["Cement", "3D Printed"],
+    PROBE_MODEL_OPTIONS_KEY: ["Alpha", "Beta"],
+    ELECTRODE_SITE_OPTIONS_KEY: [
+        "S1",
+        "M1",
+        "M2",
+        "vlOFC",
+        "vmThal",
+        "Claustrum",
+        "BLA",
+    ],
 }
 
 

@@ -15,10 +15,12 @@ from muronto_app.config import (
     CRANIAL_WINDOW_REGION_OPTIONS_KEY,
     CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
     CS_TYPE_OPTIONS_KEY,
+    ELECTRODE_SITE_OPTIONS_KEY,
     HEADPLATE_TYPE_OPTIONS_KEY,
     INVESTIGATOR_KEY,
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
+    PROBE_MODEL_OPTIONS_KEY,
     PROJECT_ID_KEY,
     SITE_OPTIONS_KEY,
     SURGEON_OPTIONS_KEY,
@@ -79,6 +81,17 @@ CENTER_ML_KEY: Final[str] = "center_ml"
 FRONT_AP_KEY: Final[str] = "front_ap"
 LEFT_ML_KEY: Final[str] = "left_ml"
 WELL_TYPE_KEY: Final[str] = "well_type"
+ELECTRODES_KEY: Final[str] = "electrodes"
+ELECTRODE_TYPE_KEY: Final[str] = "electrode_type"
+PROBE_MODEL_KEY: Final[str] = "probe_model"
+PROBE_ID_KEY: Final[str] = "probe_id"
+ELECTRODE_SITE_KEY: Final[str] = "electrode_site"
+ELECTRODE_HEMISPHERE_KEY: Final[str] = "electrode_hemisphere"
+PITCH_KEY: Final[str] = "pitch"
+YAW_KEY: Final[str] = "yaw"
+ROLL_KEY: Final[str] = "roll"
+GROUND_KEY: Final[str] = "ground"
+REFERENCE_KEY: Final[str] = "reference"
 
 VIRAL_INJECTION_CATEGORY: Final[str] = "Viral Injection"
 IMPLANT_CATEGORY: Final[str] = "Implant"
@@ -88,6 +101,10 @@ SURGERY_CATEGORY_OPTIONS: Final[tuple[str, ...]] = (
 )
 HEMISPHERE_OPTIONS: Final[tuple[str, ...]] = ("LH", "RH")
 POST_INFUSION_FLOW_TEST_OPTIONS: Final[tuple[str, ...]] = ("Pass", "Fail")
+ELECTRODE_TYPE_OPTIONS: Final[tuple[str, ...]] = (
+    "NeuroPixels",
+    "NeuroNexus",
+)
 CRANIAL_WINDOW_IMPLANT_TYPE: Final[str] = "Cranial Window"
 CRYSTAL_SKULL_IMPLANT_TYPE: Final[str] = "Crystal Skull"
 ELECTRODE_IMPLANT_TYPE: Final[str] = "Electrode"
@@ -597,6 +614,112 @@ def _validate_crystal_skull(
     }
 
 
+def _validate_electrode_entries(
+    raw_electrodes: object,
+    *,
+    field_prefix: str,
+    errors: list[str],
+) -> list[dict[str, str | float]]:
+    electrodes: list[dict[str, str | float]] = []
+    for electrode_index, raw_electrode in enumerate(
+        _raw_list(
+            raw_electrodes,
+            field_name=f"{field_prefix}.{ELECTRODES_KEY}",
+            errors=errors,
+        ),
+        start=1,
+    ):
+        field_name = f"{field_prefix}.{ELECTRODES_KEY}_{electrode_index}"
+        electrode_payload = _raw_mapping(
+            raw_electrode,
+            field_name=field_name,
+            errors=errors,
+        )
+        if electrode_payload is None:
+            continue
+
+        electrode_type = clean_string(
+            electrode_payload.get(ELECTRODE_TYPE_KEY)
+        )
+        if electrode_type not in ELECTRODE_TYPE_OPTIONS:
+            errors.append(
+                f"{field_name}.{ELECTRODE_TYPE_KEY} must be one of "
+                + ", ".join(ELECTRODE_TYPE_OPTIONS)
+                + "."
+            )
+
+        probe_model = clean_string(electrode_payload.get(PROBE_MODEL_KEY))
+        probe_id = clean_string(electrode_payload.get(PROBE_ID_KEY))
+        electrode_site = clean_string(
+            electrode_payload.get(ELECTRODE_SITE_KEY)
+        )
+        electrode_hemisphere = clean_string(
+            electrode_payload.get(ELECTRODE_HEMISPHERE_KEY)
+        )
+        pitch = clean_string(electrode_payload.get(PITCH_KEY))
+        yaw = clean_string(electrode_payload.get(YAW_KEY))
+        roll = clean_string(electrode_payload.get(ROLL_KEY))
+        ground = clean_string(electrode_payload.get(GROUND_KEY))
+        reference = clean_string(electrode_payload.get(REFERENCE_KEY))
+        for required_key, value in (
+            (PROBE_MODEL_KEY, probe_model),
+            (PROBE_ID_KEY, probe_id),
+            (ELECTRODE_SITE_KEY, electrode_site),
+            (PITCH_KEY, pitch),
+            (YAW_KEY, yaw),
+            (ROLL_KEY, roll),
+            (GROUND_KEY, ground),
+            (REFERENCE_KEY, reference),
+        ):
+            _validate_required(
+                field_name=f"{field_name}.{required_key}",
+                value=value,
+                errors=errors,
+            )
+
+        if electrode_hemisphere not in HEMISPHERE_OPTIONS:
+            errors.append(
+                f"{field_name}.{ELECTRODE_HEMISPHERE_KEY} must be one of "
+                + ", ".join(HEMISPHERE_OPTIONS)
+                + "."
+            )
+
+        ap = _validate_number(
+            field_name=f"{field_name}.{AP_KEY}",
+            value=electrode_payload.get(AP_KEY),
+            errors=errors,
+        )
+        ml = _validate_number(
+            field_name=f"{field_name}.{ML_KEY}",
+            value=electrode_payload.get(ML_KEY),
+            errors=errors,
+        )
+        dv = _validate_number(
+            field_name=f"{field_name}.{DV_KEY}",
+            value=electrode_payload.get(DV_KEY),
+            errors=errors,
+        )
+        electrodes.append(
+            {
+                ELECTRODE_TYPE_KEY: electrode_type,
+                PROBE_MODEL_KEY: probe_model,
+                PROBE_ID_KEY: probe_id,
+                ELECTRODE_SITE_KEY: electrode_site,
+                ELECTRODE_HEMISPHERE_KEY: electrode_hemisphere,
+                PITCH_KEY: pitch,
+                YAW_KEY: yaw,
+                ROLL_KEY: roll,
+                AP_KEY: ap,
+                ML_KEY: ml,
+                DV_KEY: dv,
+                GROUND_KEY: ground,
+                REFERENCE_KEY: reference,
+                NOTES_KEY: clean_string(electrode_payload.get(NOTES_KEY)),
+            }
+        )
+    return electrodes
+
+
 def _unsupported_implant_message(implant_type: str) -> str:
     label = implant_type or "Implant"
     return f"{label} implant procedures are not implemented yet."
@@ -632,6 +755,14 @@ def _validate_implant_procedure(
     if implant_type == CRYSTAL_SKULL_IMPLANT_TYPE:
         procedure[CRYSTAL_SKULL_KEY] = _validate_crystal_skull(
             procedure_payload.get(CRYSTAL_SKULL_KEY),
+            field_prefix=field_name,
+            errors=errors,
+        )
+        return procedure
+
+    if implant_type == ELECTRODE_IMPLANT_TYPE:
+        procedure[ELECTRODES_KEY] = _validate_electrode_entries(
+            procedure_payload.get(ELECTRODES_KEY),
             field_prefix=field_name,
             errors=errors,
         )
@@ -841,11 +972,13 @@ def procedure_option_values(
     list[str],
     list[str],
     list[str],
+    list[str],
+    list[str],
 ]:
     """Return reusable surgery option values from a payload."""
     raw_procedures = payload.get(SURGICAL_PROCEDURES_KEY, [])
     if not isinstance(raw_procedures, list):
-        return [], [], [], [], [], [], [], [], [], []
+        return [], [], [], [], [], [], [], [], [], [], [], []
 
     sites: list[str] = []
     viruses: list[str] = []
@@ -857,6 +990,8 @@ def procedure_option_values(
     cranial_window_regions: list[str] = []
     cs_types: list[str] = []
     crystal_skull_well_types: list[str] = []
+    probe_models: list[str] = []
+    electrode_sites: list[str] = []
     for raw_procedure in raw_procedures:
         if not isinstance(raw_procedure, Mapping):
             continue
@@ -900,6 +1035,20 @@ def procedure_option_values(
             if well_type:
                 crystal_skull_well_types.append(well_type)
 
+        raw_electrodes = raw_procedure.get(ELECTRODES_KEY, [])
+        if isinstance(raw_electrodes, list):
+            for raw_electrode in raw_electrodes:
+                if not isinstance(raw_electrode, Mapping):
+                    continue
+                probe_model = clean_string(raw_electrode.get(PROBE_MODEL_KEY))
+                electrode_site = clean_string(
+                    raw_electrode.get(ELECTRODE_SITE_KEY)
+                )
+                if probe_model:
+                    probe_models.append(probe_model)
+                if electrode_site:
+                    electrode_sites.append(electrode_site)
+
         raw_injections = raw_procedure.get(INJECTIONS_KEY, [])
         if not isinstance(raw_injections, list):
             continue
@@ -932,6 +1081,8 @@ def procedure_option_values(
         cranial_window_regions,
         cs_types,
         crystal_skull_well_types,
+        probe_models,
+        electrode_sites,
     )
 
 
@@ -950,6 +1101,8 @@ def with_surgery_options(
     cranial_window_regions: Iterable[str] = (),
     cs_types: Iterable[str] = (),
     crystal_skull_well_types: Iterable[str] = (),
+    probe_models: Iterable[str] = (),
+    electrode_sites: Iterable[str] = (),
 ) -> tuple[dict[str, Any], bool]:
     """Return config with reusable surgery options and whether it changed."""
     updated_config = deepcopy(dict(config))
@@ -995,6 +1148,10 @@ def with_surgery_options(
             CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
             crystal_skull_well_type,
         )
+    for probe_model in probe_models:
+        add_option(options, PROBE_MODEL_OPTIONS_KEY, probe_model)
+    for electrode_site in electrode_sites:
+        add_option(options, ELECTRODE_SITE_OPTIONS_KEY, electrode_site)
 
     updated_config[OPTIONS_KEY] = options
     return updated_config, options != original_options

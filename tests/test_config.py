@@ -14,6 +14,7 @@ from muronto_app.config import (
     CS_TYPE_OPTIONS_KEY,
     DEFAULT_OPTIONS,
     DEFAULT_PROJECT_ID_KEY,
+    ELECTRODE_SITE_OPTIONS_KEY,
     EMAIL_TO_INVESTIGATOR_KEY,
     EMAIL_TO_PROJECT_KEY,
     HEADPLATE_TYPE_OPTIONS_KEY,
@@ -22,6 +23,7 @@ from muronto_app.config import (
     MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
     PI_KEY,
+    PROBE_MODEL_OPTIONS_KEY,
     PROJECT_ID_KEY,
     PROJECT_NAME_KEY,
     PROJECTS_KEY,
@@ -273,6 +275,11 @@ def test_validate_config_rejects_malformed_medication_options() -> None:
         (CRANIAL_WINDOW_REGION_OPTIONS_KEY, ["S1"]),
         (CS_TYPE_OPTIONS_KEY, ["Standard", "Electropor_S1"]),
         (CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY, ["Cement", "3D Printed"]),
+        (PROBE_MODEL_OPTIONS_KEY, ["Alpha", "Beta"]),
+        (
+            ELECTRODE_SITE_OPTIONS_KEY,
+            ["S1", "M1", "M2", "vlOFC", "vmThal", "Claustrum", "BLA"],
+        ),
     ],
 )
 def test_normalize_config_adds_missing_procedure_options(
@@ -320,6 +327,11 @@ def test_normalize_config_adds_missing_procedure_options(
         (
             CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY,
             "options.crystal_skill_well_types must be a list.",
+        ),
+        (PROBE_MODEL_OPTIONS_KEY, "options.probe_models must be a list."),
+        (
+            ELECTRODE_SITE_OPTIONS_KEY,
+            "options.electrode_sites must be a list.",
         ),
     ],
 )
