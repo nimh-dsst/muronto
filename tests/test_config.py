@@ -12,6 +12,7 @@ from muronto_app.config import (
     EMAIL_TO_PROJECT_KEY,
     INVESTIGATOR_KEY,
     LA_HOME_FOLDER_KEY,
+    MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
     PI_KEY,
     PROJECT_ID_KEY,
@@ -202,6 +203,32 @@ def test_validate_config_rejects_malformed_surgeon_options() -> None:
     errors = validate_config_payload(payload)
 
     assert errors == ["options.Surgeon must be a list."]
+
+
+def test_normalize_config_adds_missing_medication_options() -> None:
+    payload = valid_payload()
+    options = cast(dict[str, object], payload[OPTIONS_KEY])
+    del options[MEDICATION_OPTIONS_KEY]
+
+    errors = validate_config_payload(payload)
+    config = normalize_config(payload)
+
+    assert errors == []
+    assert config[OPTIONS_KEY][MEDICATION_OPTIONS_KEY] == [
+        "Meloxicam",
+        "Ethiqa XR",
+        "Dexamethasone",
+    ]
+
+
+def test_validate_config_rejects_malformed_medication_options() -> None:
+    payload = valid_payload()
+    options = cast(dict[str, object], payload[OPTIONS_KEY])
+    options[MEDICATION_OPTIONS_KEY] = ["Meloxicam", ""]
+
+    errors = validate_config_payload(payload)
+
+    assert errors == ["options.medications must contain only strings."]
 
 
 def test_upsert_project_config_creates_initial_config_and_mappings() -> None:

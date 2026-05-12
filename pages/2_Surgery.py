@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Any
+from datetime import date, time
+from typing import Any, TypedDict
 
 import streamlit as st
 from labapi import ApiError
 
 from muronto_app.config import (
     LA_HOME_FOLDER_KEY,
+    MEDICATION_OPTIONS_KEY,
     OPTIONS_KEY,
     OTHER_CHOICE,
     PROJECT_ID_KEY,
@@ -46,10 +47,23 @@ from muronto_app.surgery import (
     SurgeryValidationError,
     build_surgery_payload,
     format_surgery_date,
-    with_surgeon_options,
+    format_surgery_time,
+    medication_names,
+    with_surgery_options,
 )
 
 st.set_page_config(page_title="Muronto Surgery", layout="centered")
+
+SURGERY_MEDICATION_COUNT_KEY = "surgery_medication_count"
+
+
+class PerioperativeValues(TypedDict):
+    weight_pre_g: int | float | None
+    weight_post_g: int | float | None
+    medications: list[dict[str, object]]
+    start_time: time | None
+    end_time: time | None
+    bregma_lambda_dist_mm: int | float | None
 
 
 def render_text_guidance(text: str) -> None:
@@ -70,6 +84,27 @@ def render_surgeon_select(options: dict[str, list[str]]) -> str:
     )
 
 
+def render_medication_select(
+    options: dict[str, list[str]],
+    index: int,
+) -> str:
+    choices = choice_options(options, MEDICATION_OPTIONS_KEY)
+    selected = st.selectbox(
+        f"Medication {index}",
+        options=choices,
+        key=f"surgery_medication_{index}",
+    )
+    if selected != OTHER_CHOICE:
+        return selected
+
+    return clean_string(
+        st.text_input(
+            f"New Medication {index}",
+            key=f"surgery_medication_{index}_other",
+        )
+    )
+
+
 def render_surgery_date() -> date | None:
     selected_date = st.date_input(
         "Surgery Date",
@@ -80,6 +115,19 @@ def render_surgery_date() -> date | None:
     if isinstance(selected_date, date):
         st.write(format_surgery_date(selected_date))
         return selected_date
+    return None
+
+
+def render_surgery_time(label: str, key: str) -> time | None:
+    selected_time = st.time_input(
+        label,
+        value=None,
+        key=key,
+        step=60,
+    )
+    if isinstance(selected_time, time):
+        st.write(format_surgery_time(selected_time))
+        return selected_time
     return None
 
 
@@ -123,13 +171,106 @@ def render_selected_subject(record: SubjectRecord) -> None:
         st.write(f"genotype_{index}: {genotype}")
 
 
-def save_reusable_surgeon_options(
+def increment_medication_count() -> None:
+    st.session_state[SURGERY_MEDICATION_COUNT_KEY] = (
+        st.session_state.get(SURGERY_MEDICATION_COUNT_KEY, 1) + 1
+    )
+
+
+def render_medications(
+    options: dict[str, list[str]],
+) -> list[dict[str, object]]:
+    st.session_state.setdefault(SURGERY_MEDICATION_COUNT_KEY, 1)
+
+    medications: list[dict[str, object]] = []
+    for index in range(1, st.session_state[SURGERY_MEDICATION_COUNT_KEY] + 1):
+        medication = render_medication_select(options, index)
+        conc_mgml = st.number_input(
+            "Concentration (mg/ml)",
+            min_value=0.0,
+            value=None,
+            step=0.1,
+            key=f"surgery_medication_{index}_conc_mgml",
+        )
+        volume = st.number_input(
+            "Volume (ml)",
+            min_value=0.0,
+            value=None,
+            step=0.01,
+            key=f"surgery_medication_{index}_volume",
+        )
+        medications.append(
+            {
+                "medication": medication,
+                "conc_mgml": conc_mgml,
+                "volume": volume,
+            }
+        )
+
+    return medications
+
+
+def render_perioperative_monitoring(
+    options: dict[str, list[str]],
+) -> PerioperativeValues:
+    st.subheader("Perioperative Monitoring & Medications")
+    weight_pre_g = st.number_input(
+        "Weight Pre (grams)",
+        min_value=0.0,
+        value=None,
+        step=0.1,
+        key="surgery_weight_pre_g",
+    )
+    weight_post_g = st.number_input(
+        "Weight Post (grams)",
+        min_value=0.0,
+        value=None,
+        step=0.1,
+        key="surgery_weight_post_g",
+    )
+
+    st.markdown("#### Medications")
+    if st.button(
+        "Add medication",
+        help="Add another medication entry.",
+        use_container_width=True,
+    ):
+        increment_medication_count()
+        st.rerun()
+    medications = render_medications(options)
+
+    start_time = render_surgery_time("Start Time", "surgery_start_time")
+    end_time = render_surgery_time("End Time", "surgery_end_time")
+    bregma_lambda_dist_mm = st.number_input(
+        "Bregma Lambda Distance (mm)",
+        min_value=0.0,
+        value=None,
+        step=0.1,
+        key="surgery_bregma_lambda_dist_mm",
+    )
+
+    return {
+        "weight_pre_g": weight_pre_g,
+        "weight_post_g": weight_post_g,
+        "medications": medications,
+        "start_time": start_time,
+        "end_time": end_time,
+        "bregma_lambda_dist_mm": bregma_lambda_dist_mm,
+    }
+
+
+def save_reusable_surgery_options(
     *,
     notebook: Any,
     config: dict[str, Any],
     surgeon: str,
+    medications: list[str],
 ) -> None:
-    updated_config, changed = with_surgeon_options(config, surgeon=surgeon)
+    updated_config, changed = with_surgery_options(
+        config,
+        surgeon=surgeon,
+        medications=medications,
+    )
     if not changed:
         return
 
@@ -140,7 +281,7 @@ def save_reusable_surgeon_options(
     if config_page is None:
         st.warning(
             "Saved the surgery record, but could not find muronto_config to "
-            "save the reusable surgeon option."
+            "save reusable surgery options."
         )
         return
 
@@ -198,6 +339,8 @@ def render_surgery_form(
     )
     postop_cnn = st.text_input("PostOp CNN", key="surgery_postop_cnn")
 
+    perioperative_values = render_perioperative_monitoring(options)
+
     submitted = st.button(
         "Save surgery record",
         type="primary",
@@ -216,6 +359,14 @@ def render_surgery_form(
             surgery_date=surgery_date,
             preop_cnn=preop_cnn,
             postop_cnn=postop_cnn,
+            weight_pre_g=perioperative_values["weight_pre_g"],
+            weight_post_g=perioperative_values["weight_post_g"],
+            medications=perioperative_values["medications"],
+            start_time=perioperative_values["start_time"],
+            end_time=perioperative_values["end_time"],
+            bregma_lambda_dist_mm=perioperative_values[
+                "bregma_lambda_dist_mm"
+            ],
         )
     except SurgeryValidationError as exc:
         st.error("Complete the surgery form before saving the record.")
@@ -233,15 +384,16 @@ def render_surgery_form(
         return
 
     try:
-        save_reusable_surgeon_options(
+        save_reusable_surgery_options(
             notebook=notebook,
             config=config,
-            surgeon=payload["surgeon"],
+            surgeon=clean_string(payload["surgeon"]),
+            medications=medication_names(payload),
         )
     except ApiError as exc:
         st.warning(
             "Saved the surgery record, but could not save the reusable "
-            f"surgeon option to muronto_config: {exc}"
+            f"surgery options to muronto_config: {exc}"
         )
 
     action = "Created" if result.created else "Updated"

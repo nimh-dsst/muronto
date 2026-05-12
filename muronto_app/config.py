@@ -28,6 +28,7 @@ OPTIONS_KEY: Final[str] = "options"
 STRAIN_OPTIONS_KEY: Final[str] = "strain"
 SOURCE_TYPE_OPTIONS_KEY: Final[str] = "source_type"
 SURGEON_OPTIONS_KEY: Final[str] = "Surgeon"
+MEDICATION_OPTIONS_KEY: Final[str] = "medications"
 
 PROJECT_VALUE_KEYS: Final[tuple[str, ...]] = (
     PROJECT_ID_KEY,
@@ -50,7 +51,10 @@ SUBJECT_OPTION_KEYS: Final[tuple[str, ...]] = (
     SOURCE_TYPE_OPTIONS_KEY,
 )
 
-SURGERY_OPTION_KEYS: Final[tuple[str, ...]] = (SURGEON_OPTIONS_KEY,)
+SURGERY_OPTION_KEYS: Final[tuple[str, ...]] = (
+    SURGEON_OPTIONS_KEY,
+    MEDICATION_OPTIONS_KEY,
+)
 
 OPTION_KEYS: Final[tuple[str, ...]] = (
     *OPTION_VALUE_KEYS,
@@ -121,6 +125,7 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
     STRAIN_OPTIONS_KEY: DEFAULT_STRAIN_OPTIONS,
     SOURCE_TYPE_OPTIONS_KEY: ["Breeding", "JAX"],
     SURGEON_OPTIONS_KEY: ["APF", "CY", "DK", "EP", "LZ", "MH", "SB", "SL"],
+    MEDICATION_OPTIONS_KEY: ["Meloxicam", "Ethiqa XR", "Dexamethasone"],
 }
 
 
