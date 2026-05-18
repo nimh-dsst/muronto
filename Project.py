@@ -60,6 +60,7 @@ from muronto_app.state import (
     SELECTED_NOTEBOOK_NAME_STATE_KEY,
     SELECTED_NOTEBOOK_STATE_KEY,
     SELECTED_PROJECT_ID_STATE_KEY,
+    SELECTED_PROJECT_WIDGET_KEY,
     USER_EMAIL_INPUT_KEY,
     USER_STATE_KEY,
     project_state_keys,
@@ -515,6 +516,13 @@ def reset_config_folder_state() -> None:
     st.session_state.pop(PROJECT_FORM_CONTEXT_KEY, None)
 
 
+def sync_active_project_selection() -> None:
+    selected_project_id = st.session_state.get(SELECTED_PROJECT_WIDGET_KEY)
+    if selected_project_id:
+        st.session_state[SELECTED_PROJECT_ID_STATE_KEY] = selected_project_id
+    reset_config_folder_state()
+
+
 def prepare_home_folder_picker(
     *,
     context_key: str,
@@ -548,12 +556,13 @@ def render_active_project_selector(
     )
     if selected_project_id:
         st.session_state[SELECTED_PROJECT_ID_STATE_KEY] = selected_project_id
+        st.session_state[SELECTED_PROJECT_WIDGET_KEY] = selected_project_id
 
     return st.selectbox(
         "Active project",
         options=available_project_ids,
-        key=SELECTED_PROJECT_ID_STATE_KEY,
-        on_change=reset_config_folder_state,
+        key=SELECTED_PROJECT_WIDGET_KEY,
+        on_change=sync_active_project_selection,
         format_func=lambda project_id: format_project_label(
             config,
             project_id,

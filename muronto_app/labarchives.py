@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from labapi import (
     NodeExistsError,
     NotebookDirectory,
     NotebookPage,
+    TextEntry,
 )
 
 from muronto_app.config import (
@@ -144,6 +146,75 @@ def _json_attachment_content(
     )
 
 
+def _json_reference_text_content(
+    payload: Mapping[str, Any],
+    *,
+    attachment_entry_id: str,
+    caption: str,
+) -> str:
+    preview_json = html.escape(json.dumps(dict(payload), indent=4))
+    return f"""
+<p>Reference Attachment: {html.escape(caption)}</p>
+<p>Entry ID: {html.escape(attachment_entry_id)}</p>
+<pre>
+{preview_json}
+</pre>
+"""
+
+
+def _is_text_entry(entry: object) -> bool:
+    return isinstance(entry, TextEntry) or (
+        getattr(entry, "content_type", "") == "text entry"
+    )
+
+
+def _find_json_reference_text_entry(
+    page: Any,
+    attachment_entry: Any,
+) -> Any | None:
+    attachment_entry_id = clean_string(getattr(attachment_entry, "id", ""))
+    if not attachment_entry_id:
+        return None
+
+    entry_id_markers = (
+        f"Entry ID: {attachment_entry_id}",
+        f"Entry ID: {html.escape(attachment_entry_id)}",
+    )
+    for entry in page.entries:
+        if not _is_text_entry(entry):
+            continue
+
+        content = getattr(entry, "content", None)
+        if isinstance(content, str) and any(
+            marker in content for marker in entry_id_markers
+        ):
+            return entry
+
+    return None
+
+
+def _sync_json_reference_text_entry(
+    page: Any,
+    payload: Mapping[str, Any],
+    *,
+    attachment_entry: Any,
+    caption: str,
+) -> None:
+    text_entry = _find_json_reference_text_entry(page, attachment_entry)
+    if text_entry is None:
+        return
+
+    attachment_entry_id = clean_string(getattr(attachment_entry, "id", ""))
+    if not attachment_entry_id:
+        return
+
+    text_entry.content = _json_reference_text_content(
+        payload,
+        attachment_entry_id=attachment_entry_id,
+        caption=caption,
+    )
+
+
 def _file_attachment_content(
     payload: bytes,
     *,
@@ -263,6 +334,12 @@ def save_config_attachment(
         existing_entry.content = _json_attachment_content(
             config,
             filename=CONFIG_FILENAME,
+            caption=CONFIG_CAPTION,
+        )
+        _sync_json_reference_text_entry(
+            page,
+            config,
+            attachment_entry=existing_entry,
             caption=CONFIG_CAPTION,
         )
         return existing_entry
@@ -423,6 +500,12 @@ def save_surgery_attachment(
         existing_entry.content = _json_attachment_content(
             surgery_payload,
             filename=filename,
+            caption=SURGERY_ATTACHMENT_CAPTION,
+        )
+        _sync_json_reference_text_entry(
+            page,
+            surgery_payload,
+            attachment_entry=existing_entry,
             caption=SURGERY_ATTACHMENT_CAPTION,
         )
         return SurgeryWriteResult(

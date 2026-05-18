@@ -18,6 +18,7 @@ SELECTED_NOTEBOOK_ID_KEY: Final[str] = "selected_notebook_id"
 SELECTED_NOTEBOOK_STATE_KEY: Final[str] = "selected_notebook"
 SELECTED_NOTEBOOK_NAME_STATE_KEY: Final[str] = "selected_notebook_name"
 SELECTED_PROJECT_ID_STATE_KEY: Final[str] = "selected_project_id"
+SELECTED_PROJECT_WIDGET_KEY: Final[str] = "selected_project_widget"
 
 CONFIG_PAGE_STATE_KEY: Final[str] = "muronto_config_page"
 CONFIG_PAGE_ID_STATE_KEY: Final[str] = "muronto_config_page_id"
@@ -38,6 +39,7 @@ def project_state_keys() -> tuple[str, ...]:
         SELECTED_NOTEBOOK_STATE_KEY,
         SELECTED_NOTEBOOK_NAME_STATE_KEY,
         SELECTED_PROJECT_ID_STATE_KEY,
+        SELECTED_PROJECT_WIDGET_KEY,
         CONFIG_PAGE_STATE_KEY,
         CONFIG_PAGE_ID_STATE_KEY,
         CONFIG_ATTACHMENT_STATE_KEY,

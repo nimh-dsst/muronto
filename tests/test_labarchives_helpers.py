@@ -109,8 +109,31 @@ class FakeEntry:
         self.updated_content = value
 
 
-class FakeEntries(list[FakeEntry]):
-    def __init__(self, entries: list[FakeEntry]) -> None:
+class FakeTextEntry:
+    content_type = "text entry"
+
+    def __init__(
+        self,
+        content: str,
+        *,
+        entry_id: str = "text-entry",
+    ) -> None:
+        self.id = entry_id
+        self._content = content
+        self.updated_content: str | None = None
+
+    @property
+    def content(self) -> str:
+        return self._content
+
+    @content.setter
+    def content(self, value: str) -> None:
+        self._content = value
+        self.updated_content = value
+
+
+class FakeEntries(list[Any]):
+    def __init__(self, entries: list[Any]) -> None:
         super().__init__(entries)
         self.created: tuple[dict[str, Any], str, str] | None = None
         self.created_attachment: tuple[bytes, str, str, str] | None = None
@@ -157,7 +180,7 @@ class FakeEntries(list[FakeEntry]):
 class FakePage:
     def __init__(
         self,
-        entries: list[FakeEntry],
+        entries: list[Any],
         *,
         name: str = CONFIG_PAGE_NAME,
     ) -> None:
@@ -299,6 +322,27 @@ def test_save_config_attachment_updates_existing_entry() -> None:
     assert entry.updated_content.caption == CONFIG_CAPTION
 
 
+def test_save_config_attachment_updates_reference_text_entry() -> None:
+    entry = FakeEntry(config_payload(), entry_id="config-entry")
+    text_entry = FakeTextEntry(
+        "<p>Reference Attachment: muronto_config</p>"
+        "<p>Entry ID: config-entry</p>"
+        "<pre>old preview</pre>"
+    )
+    page = FakePage([entry, text_entry])
+    payload = config_payload()
+    payload[PROJECTS_KEY]["SEASIC"][PROJECT_NAME_KEY] = "Updated project"
+
+    saved = save_config_attachment(page, payload, existing_entry=entry)
+
+    assert saved is entry
+    assert text_entry.updated_content is not None
+    assert "Reference Attachment: muronto_config" in text_entry.updated_content
+    assert "Entry ID: config-entry" in text_entry.updated_content
+    assert "Updated project" in text_entry.updated_content
+    assert "old preview" not in text_entry.updated_content
+
+
 def test_save_config_attachment_creates_when_missing() -> None:
     page = FakePage([])
 
@@ -431,6 +475,52 @@ def test_save_surgery_attachment_creates_and_updates_by_filename() -> None:
     assert (
         page.entries[0].updated_content.caption == SURGERY_ATTACHMENT_CAPTION
     )
+
+
+def test_save_surgery_attachment_updates_reference_text_entry() -> None:
+    entry = FakeEntry(
+        {
+            "project_id": "SEASIC",
+            "investigator": "APF",
+            "animal_id": "123-4567",
+            "ear_tag": "123",
+            "surgeon": "SL",
+            "surgery_date": "20260511",
+            "preop_cnn": "123456",
+            "postop_cnn": "654321",
+        },
+        filename="123-4567_surgery_20260511.json",
+        caption=SURGERY_ATTACHMENT_CAPTION,
+        entry_id="surgery-entry",
+    )
+    text_entry = FakeTextEntry(
+        "<p>Reference Attachment: surgery</p>"
+        "<p>Entry ID: surgery-entry</p>"
+        "<pre>old preview</pre>"
+    )
+    page = FakePage([entry, text_entry], name="123-4567")
+
+    result = save_surgery_attachment(
+        page,
+        {
+            "project_id": "SEASIC",
+            "investigator": "APF",
+            "animal_id": "123-4567",
+            "ear_tag": "123",
+            "surgeon": "JGL",
+            "surgery_date": "20260511",
+            "preop_cnn": "123456",
+            "postop_cnn": "654321",
+        },
+    )
+
+    assert not result.created
+    assert result.attachment_entry is entry
+    assert text_entry.updated_content is not None
+    assert SURGERY_ATTACHMENT_CAPTION in text_entry.updated_content
+    assert "Entry ID: surgery-entry" in text_entry.updated_content
+    assert "JGL" in text_entry.updated_content
+    assert "old preview" not in text_entry.updated_content
 
 
 def test_save_surgery_file_attachment_creates_reference() -> None:
