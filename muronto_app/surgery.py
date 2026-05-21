@@ -222,6 +222,24 @@ def _validate_non_negative_number(
     return numeric_value
 
 
+def _validate_optional_non_negative_number(
+    *,
+    field_name: str,
+    value: object,
+    errors: list[str],
+) -> float | None:
+    if value is None:
+        return None
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        errors.append(f"{field_name} must be a number.")
+        return 0.0
+
+    numeric_value = float(value)
+    if numeric_value < 0:
+        errors.append(f"{field_name} must be non-negative.")
+    return numeric_value
+
+
 def _validate_number(
     *,
     field_name: str,
@@ -989,7 +1007,7 @@ def build_surgery_payload(
         value=weight_post_g,
         errors=errors,
     )
-    cleaned_bregma_lambda_dist_mm = _validate_non_negative_number(
+    cleaned_bregma_lambda_dist_mm = _validate_optional_non_negative_number(
         field_name=BREGMA_LAMBDA_DIST_MM_KEY,
         value=bregma_lambda_dist_mm,
         errors=errors,

@@ -891,6 +891,7 @@ def render_perioperative_monitoring(
             min_value=0.0,
             value=number_default(defaults.get(BREGMA_LAMBDA_DIST_MM_KEY)),
             step=0.1,
+            placeholder="Optional",
             key=surgery_key(form_key, "bregma_lambda_dist_mm"),
         )
 

@@ -351,6 +351,54 @@ def test_surgery_page_uses_hhmm_text_inputs_for_times() -> None:
     assert "surgery_end_time" not in [widget.key for widget in app.time_input]
 
 
+def test_surgery_page_saves_blank_bregma_lambda_distance_as_null() -> None:
+    subject_page = seed_subject_page()
+    app = surgery_page_app(FakeHomeFolder([subject_page])).run()
+
+    app.selectbox(key="surgery_procedure_1_category").select("Implant").run()
+
+    assert app.number_input(key="surgery_bregma_lambda_dist_mm").value is None
+
+    app.selectbox(key="surgery_surgeon").select("SL")
+    app.date_input(key="surgery_date").set_value(date(2026, 5, 11))
+    app.text_input(key="surgery_preop_cnn").set_value("123456")
+    app.text_input(key="surgery_postop_cnn").set_value("654321")
+    app.number_input(key="surgery_weight_pre_g").set_value(20.0)
+    app.number_input(key="surgery_weight_post_g").set_value(19.5)
+    app.text_input(key="surgery_start_time").set_value("0900")
+    app.text_input(key="surgery_end_time").set_value("1000")
+    app.selectbox(key="surgery_procedure_1_implant_type").select(
+        "Cranial Window"
+    )
+    app.selectbox(
+        key="surgery_procedure_1_cranial_window_headplate_type"
+    ).select("Standard_Y")
+    app.selectbox(
+        key="surgery_procedure_1_cranial_window_coverslip_type"
+    ).select("Standard Single")
+    app.selectbox(
+        key="surgery_procedure_1_cranial_window_coverslip_diameter"
+    ).select("3.5")
+    app.selectbox(
+        key="surgery_procedure_1_cranial_window_coverslip_thickness"
+    ).select("1.5")
+    app.selectbox(key="surgery_procedure_1_cranial_window_region").select("S1")
+    app.number_input(
+        key="surgery_procedure_1_cranial_window_center_ap"
+    ).set_value(1.0)
+    app.number_input(
+        key="surgery_procedure_1_cranial_window_center_ml"
+    ).set_value(2.0)
+    app.selectbox(key="surgery_procedure_1_cranial_window_well_type").select(
+        "Cement"
+    )
+    app.button(key="surgery_submit").click().run()
+
+    assert not app.exception
+    payload = attachment_payload(page_surgery_attachment(subject_page))
+    assert payload["bregma_lambda_dist_mm"] is None
+
+
 def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     subject_page = seed_subject_page()
     app = surgery_page_app(FakeHomeFolder([subject_page])).run()

@@ -25,6 +25,7 @@ from muronto_app.config import (
 )
 from muronto_app.surgery import (
     ATTACHMENTS_KEY,
+    BREGMA_LAMBDA_DIST_MM_KEY,
     CAPTION_KEY,
     CRANIAL_WINDOW_IMPLANT_TYPE,
     CRYSTAL_SKULL_IMPLANT_TYPE,
@@ -232,6 +233,36 @@ def test_build_surgery_payload_formats_date_and_values() -> None:
         "bregma_lambda_dist_mm": 4.2,
         "surgical_procedures": [valid_viral_procedure()],
     }
+
+
+def test_build_surgery_payload_allows_null_bregma_lambda_distance() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["bregma_lambda_dist_mm"] = None
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload[BREGMA_LAMBDA_DIST_MM_KEY] is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_error"),
+    [
+        (-0.1, "bregma_lambda_dist_mm must be non-negative."),
+        ("4.2", "bregma_lambda_dist_mm must be a number."),
+        (True, "bregma_lambda_dist_mm must be a number."),
+    ],
+)
+def test_build_surgery_payload_validates_provided_bregma_lambda_distance(
+    value: object,
+    expected_error: str,
+) -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["bregma_lambda_dist_mm"] = value
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    assert expected_error in exc_info.value.errors
 
 
 def test_build_surgery_payload_supports_general_notes() -> None:
@@ -542,11 +573,12 @@ def test_build_surgery_payload_requires_perioperative_fields() -> None:
     with pytest.raises(SurgeryValidationError) as exc_info:
         build_surgery_payload(**kwargs)
 
-    assert "weight_pre_g is required." in exc_info.value.errors
-    assert "weight_post_g is required." in exc_info.value.errors
-    assert "start_time must be selected." in exc_info.value.errors
-    assert "end_time must be selected." in exc_info.value.errors
-    assert "bregma_lambda_dist_mm is required." in exc_info.value.errors
+    errors = exc_info.value.errors
+    assert "weight_pre_g is required." in errors
+    assert "weight_post_g is required." in errors
+    assert "start_time must be selected." in errors
+    assert "end_time must be selected." in errors
+    assert "bregma_lambda_dist_mm is required." not in errors
 
 
 def test_build_surgery_payload_supports_empty_medications() -> None:
