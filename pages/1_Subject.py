@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any
@@ -36,12 +37,15 @@ from muronto_app.state import (
 )
 from muronto_app.subject import (
     ANIMAL_ID_KEY,
+    ANIMAL_ID_PATTERN,
     ANIMAL_ID_PATTERN_TEXT,
     CCN_KEY,
+    CCN_PATTERN,
     CCN_PATTERN_TEXT,
     DOB_KEY,
     DOW_KEY,
     EAR_TAG_KEY,
+    EAR_TAG_PATTERN,
     EAR_TAG_PATTERN_TEXT,
     GENOTYPE_KEY,
     GENOTYPE_OPTIONS,
@@ -65,6 +69,26 @@ SUBJECT_SELECTED_RECORD_KEY = "subject_edit_record"
 
 def render_text_guidance(text: str) -> None:
     st.markdown(text)
+
+
+def render_pattern_text_input(
+    *,
+    label: str,
+    value: object = "",
+    key: str,
+    pattern: re.Pattern[str],
+    pattern_text: str,
+    example: str,
+) -> str:
+    entered_value = clean_string(
+        st.text_input(label, value=clean_string(value), key=key)
+    )
+    if entered_value and not pattern.fullmatch(entered_value):
+        st.error(
+            f"{label} must match the regex pattern `{pattern_text}`, "
+            f"for example `{example}`."
+        )
+    return entered_value
 
 
 def selected_index(options: Sequence[str], value: str) -> int:
@@ -217,7 +241,14 @@ def render_parent_ccn(
         f"{PARENT_CCN_KEY} must match the regex pattern "
         f"`{CCN_PATTERN_TEXT}`, for example `123456`."
     )
-    return st.text_input(PARENT_CCN_KEY, value=value, key=widget_key)
+    return render_pattern_text_input(
+        label=PARENT_CCN_KEY,
+        value=value,
+        key=widget_key,
+        pattern=CCN_PATTERN,
+        pattern_text=CCN_PATTERN_TEXT,
+        example="123456",
+    )
 
 
 def save_reusable_subject_options(
@@ -284,30 +315,39 @@ def render_subject_form(
         "animal_id must match the regex pattern "
         f"`{ANIMAL_ID_PATTERN_TEXT}`, for example `123-4567`."
     )
-    animal_id = st.text_input(
-        "animal_id",
+    animal_id = render_pattern_text_input(
+        label="animal_id",
         value=payload_defaults.get(ANIMAL_ID_KEY, ""),
         key=f"{form_key}_animal_id",
+        pattern=ANIMAL_ID_PATTERN,
+        pattern_text=ANIMAL_ID_PATTERN_TEXT,
+        example="123-4567",
     )
 
     render_text_guidance(
         "ear_tag must match the regex pattern "
         f"`{EAR_TAG_PATTERN_TEXT}`, for example `123`."
     )
-    ear_tag = st.text_input(
-        "ear_tag",
+    ear_tag = render_pattern_text_input(
+        label="ear_tag",
         value=payload_defaults.get(EAR_TAG_KEY, ""),
         key=f"{form_key}_ear_tag",
+        pattern=EAR_TAG_PATTERN,
+        pattern_text=EAR_TAG_PATTERN_TEXT,
+        example="123",
     )
 
     render_text_guidance(
         "ccn must match the regex pattern "
         f"`{CCN_PATTERN_TEXT}`, for example `123456`."
     )
-    ccn = st.text_input(
-        "ccn",
+    ccn = render_pattern_text_input(
+        label="ccn",
         value=payload_defaults.get(CCN_KEY, ""),
         key=f"{form_key}_ccn",
+        pattern=CCN_PATTERN,
+        pattern_text=CCN_PATTERN_TEXT,
+        example="123456",
     )
 
     sex = st.selectbox(

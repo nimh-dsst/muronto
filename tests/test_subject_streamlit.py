@@ -253,6 +253,41 @@ def page_text_entry(page: FakePage) -> FakeTextEntry:
     return entries[0]
 
 
+def error_values(app: AppTest) -> list[str]:
+    return [error.value for error in app.error]
+
+
+def test_subject_page_immediately_validates_regex_fields() -> None:
+    app = subject_page_app(FakeHomeFolder()).run()
+
+    app.text_input(key="subject_create_animal_id").set_value("1234567")
+    app.text_input(key="subject_create_ear_tag").set_value("12")
+    app.text_input(key="subject_create_ccn").set_value("abcdef")
+    app.selectbox(key="subject_create_source_type").select("Breeding")
+    app.run()
+    app.text_input(key="subject_create_parent_ccn").set_value("12345").run()
+
+    errors = error_values(app)
+    assert any(
+        "animal_id must match the regex pattern" in error for error in errors
+    )
+    assert any(
+        "ear_tag must match the regex pattern" in error for error in errors
+    )
+    assert any("ccn must match the regex pattern" in error for error in errors)
+    assert any(
+        "parent_ccn must match the regex pattern" in error
+        for error in errors
+    )
+
+    app.text_input(key="subject_create_animal_id").set_value("123-4567")
+    app.text_input(key="subject_create_ear_tag").set_value("123")
+    app.text_input(key="subject_create_ccn").set_value("123456")
+    app.text_input(key="subject_create_parent_ccn").set_value("654321").run()
+
+    assert not error_values(app)
+
+
 def test_subject_page_create_then_edit_updates_json_and_text() -> None:
     home_folder = FakeHomeFolder()
     app = subject_page_app(home_folder).run()

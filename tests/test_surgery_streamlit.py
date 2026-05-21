@@ -307,6 +307,10 @@ def page_surgery_text_entry(page: FakePage) -> FakeTextEntry:
     return entries[0]
 
 
+def error_values(app: AppTest) -> list[str]:
+    return [error.value for error in app.error]
+
+
 def test_surgery_page_defaults_post_infusion_flow_test_to_na() -> None:
     app = surgery_page_app(FakeHomeFolder([seed_subject_page()])).run()
 
@@ -354,6 +358,42 @@ def test_surgery_page_uses_hhmm_text_inputs_for_times() -> None:
         widget.key for widget in app.time_input
     ]
     assert "surgery_end_time" not in [widget.key for widget in app.time_input]
+
+
+def test_surgery_page_immediately_validates_regex_fields() -> None:
+    app = surgery_page_app(FakeHomeFolder([seed_subject_page()])).run()
+    virus = "AAV1-hSynapsin1-axon-GCaMP6s"
+
+    app.multiselect(key="surgery_procedure_1_injection_1_viruses").select(
+        virus
+    ).run()
+    stock_titer_key = (
+        "surgery_procedure_1_injection_1_"
+        "virus_AAV1_hSynapsin1_axon_GCaMP6s_stock_titer"
+    )
+    app.text_input(key="surgery_preop_cnn").set_value("12345")
+    app.text_input(key="surgery_postop_cnn").set_value("abcdef")
+    app.text_input(key=stock_titer_key).set_value("2x10x13").run()
+
+    errors = error_values(app)
+    assert any(
+        "PreOp CNN must match the regex pattern" in error
+        for error in errors
+    )
+    assert any(
+        "PostOp CNN must match the regex pattern" in error
+        for error in errors
+    )
+    assert any(
+        "Stock Titer must match the regex pattern" in error
+        for error in errors
+    )
+
+    app.text_input(key="surgery_preop_cnn").set_value("123456")
+    app.text_input(key="surgery_postop_cnn").set_value("654321")
+    app.text_input(key=stock_titer_key).set_value("2_10_13").run()
+
+    assert not error_values(app)
 
 
 def test_surgery_page_saves_blank_bregma_lambda_distance_as_null() -> None:

@@ -66,6 +66,7 @@ from muronto_app.surgery import (
     BREGMA_LAMBDA_DIST_MM_KEY,
     CENTER_AP_KEY,
     CENTER_ML_KEY,
+    CNN_PATTERN,
     CNN_PATTERN_TEXT,
     CONC_MGML_KEY,
     COVERSLIP_DIAMETER_KEY,
@@ -118,6 +119,7 @@ from muronto_app.surgery import (
     SITE_KEY,
     START_TIME_KEY,
     STOCK_TITER_KEY,
+    STOCK_TITER_PATTERN,
     STOCK_TITER_PATTERN_TEXT,
     SURGEON_KEY,
     SURGERY_CATEGORY_KEY,
@@ -198,6 +200,26 @@ class GeneralNotesAttachmentValues(TypedDict):
 
 def render_text_guidance(text: str) -> None:
     st.markdown(text)
+
+
+def render_pattern_text_input(
+    *,
+    label: str,
+    value: object = "",
+    key: str,
+    pattern: re.Pattern[str],
+    pattern_text: str,
+    example: str,
+) -> str:
+    entered_value = clean_string(
+        st.text_input(label, value=clean_string(value), key=key)
+    )
+    if entered_value and not pattern.fullmatch(entered_value):
+        st.error(
+            f"{label} must match the regex pattern `{pattern_text}`, "
+            f"for example `{example}`."
+        )
+    return entered_value
 
 
 def surgery_key(form_key: str, suffix: str) -> str:
@@ -1061,10 +1083,13 @@ def render_virus_attributes(
         "Stock Titer must match the regex pattern "
         f"`{STOCK_TITER_PATTERN_TEXT}`, for example `2_10_13`."
     )
-    stock_titer = st.text_input(
-        "Stock Titer",
+    stock_titer = render_pattern_text_input(
+        label="Stock Titer",
         key=f"{virus_key}_stock_titer",
         value=clean_string(defaults.get(STOCK_TITER_KEY)),
+        pattern=STOCK_TITER_PATTERN,
+        pattern_text=STOCK_TITER_PATTERN_TEXT,
+        example="2_10_13",
     )
     dilution = st.text_input(
         "Dilution",
@@ -2196,20 +2221,26 @@ def render_surgery_form(
             "PreOp CNN must match the regex pattern "
             f"`{CNN_PATTERN_TEXT}`, for example `123456`."
         )
-        preop_cnn = st.text_input(
-            "PreOp CNN",
+        preop_cnn = render_pattern_text_input(
+            label="PreOp CNN",
             key=surgery_key(form_key, "preop_cnn"),
             value=string_default(payload_defaults, PREOP_CNN_KEY),
+            pattern=CNN_PATTERN,
+            pattern_text=CNN_PATTERN_TEXT,
+            example="123456",
         )
 
         render_text_guidance(
             "PostOp CNN must match the regex pattern "
             f"`{CNN_PATTERN_TEXT}`, for example `123456`."
         )
-        postop_cnn = st.text_input(
-            "PostOp CNN",
+        postop_cnn = render_pattern_text_input(
+            label="PostOp CNN",
             key=surgery_key(form_key, "postop_cnn"),
             value=string_default(payload_defaults, POSTOP_CNN_KEY),
+            pattern=CNN_PATTERN,
+            pattern_text=CNN_PATTERN_TEXT,
+            example="123456",
         )
 
     perioperative_values = render_perioperative_monitoring(
