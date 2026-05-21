@@ -1022,7 +1022,7 @@ def render_virus_attributes(
         value=clean_string(defaults.get(VIRUS_ID_KEY)),
     )
     virus_stock = st.text_input(
-        "Virus Stock",
+        "Virus Lot",
         key=f"{virus_key}_virus_stock",
         value=clean_string(defaults.get(VIRUS_STOCK_KEY)),
     )
