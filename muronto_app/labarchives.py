@@ -40,10 +40,12 @@ from muronto_app.surgery import (
     MIME_TYPE_KEY,
     SURGERY_ATTACHMENT_CAPTION,
     SURGERY_DATE_KEY,
+    SURGERY_DRAFT_ID_KEY,
     SURGERY_FILE_ATTACHMENT_CAPTION,
     SURGERY_FILE_UPLOAD_TYPES,
     UPLOAD_TYPE_KEY,
     surgery_json_filename,
+    surgery_record_file_token,
 )
 
 
@@ -539,7 +541,9 @@ def read_surgery_attachment(entry: Any) -> dict[str, Any] | None:
         for raw_key, value in decoded.items()
         if (key := clean_string(raw_key))
     }
-    if not payload.get(ANIMAL_ID_KEY) or not payload.get(SURGERY_DATE_KEY):
+    if not payload.get(ANIMAL_ID_KEY) or not surgery_record_file_token(
+        payload
+    ):
         return None
     return payload
 
@@ -568,6 +572,7 @@ def discover_surgery_records(page: Any) -> list[SurgeryRecord]:
         records,
         key=lambda record: (
             clean_string(record.payload.get(SURGERY_DATE_KEY)),
+            clean_string(record.payload.get(SURGERY_DRAFT_ID_KEY)),
             clean_string(record.payload.get(ANIMAL_ID_KEY)).lower(),
         ),
     )
@@ -581,13 +586,13 @@ def save_surgery_attachment(
 ) -> SurgeryWriteResult:
     """Create or update a surgery JSON attachment on a subject page."""
     animal_id = clean_string(surgery_payload.get(ANIMAL_ID_KEY))
-    surgery_date = clean_string(surgery_payload.get(SURGERY_DATE_KEY))
+    file_token = surgery_record_file_token(surgery_payload)
     if not animal_id:
         raise ValueError("animal_id is required.")
-    if not surgery_date:
-        raise ValueError("surgery_date is required.")
+    if not file_token:
+        raise ValueError("surgery_date or surgery_draft_id is required.")
 
-    filename = surgery_json_filename(animal_id, surgery_date)
+    filename = surgery_json_filename(animal_id, file_token)
     entry_to_update = existing_entry or find_surgery_attachment(page, filename)
     if entry_to_update is not None:
         entry_to_update.content = _json_attachment_content(

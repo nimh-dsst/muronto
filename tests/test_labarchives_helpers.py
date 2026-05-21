@@ -49,7 +49,10 @@ from muronto_app.surgery import (
     MIME_TYPE_KEY,
     NOTE_UPLOAD_TYPE,
     SURGERY_ATTACHMENT_CAPTION,
+    SURGERY_DRAFT_ID_KEY,
     SURGERY_FILE_ATTACHMENT_CAPTION,
+    SURGERY_STATUS_INCOMPLETE,
+    SURGERY_STATUS_KEY,
     UPLOAD_TYPE_KEY,
 )
 
@@ -606,6 +609,57 @@ def test_discover_surgery_records_on_subject_page() -> None:
     assert records[0].attachment_entry is page.entries[0]
     assert records[0].payload["surgery_date"] == "20260511"
     assert records[0].payload["general_notes"] == "baseline"
+
+
+def test_discover_surgery_records_includes_incomplete_drafts() -> None:
+    surgery_payload = {
+        "project_id": "SEASIC",
+        "investigator": "APF",
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "surgeon": "",
+        "surgery_date": "",
+        SURGERY_DRAFT_ID_KEY: "draft123",
+        SURGERY_STATUS_KEY: SURGERY_STATUS_INCOMPLETE,
+    }
+    page = FakePage(
+        [
+            FakeEntry(
+                surgery_payload,
+                filename="123-4567_surgery_incomplete_draft123.json",
+                caption=SURGERY_ATTACHMENT_CAPTION,
+            )
+        ],
+        name="123-4567",
+    )
+
+    records = discover_surgery_records(page)
+
+    assert len(records) == 1
+    assert records[0].payload[SURGERY_DRAFT_ID_KEY] == "draft123"
+
+
+def test_save_surgery_attachment_creates_draft_without_date() -> None:
+    page = FakePage([], name="123-4567")
+    payload = {
+        "project_id": "SEASIC",
+        "investigator": "APF",
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "surgeon": "",
+        "surgery_date": "",
+        SURGERY_DRAFT_ID_KEY: "draft123",
+        SURGERY_STATUS_KEY: SURGERY_STATUS_INCOMPLETE,
+    }
+
+    created = save_surgery_attachment(page, payload)
+
+    assert created.created
+    assert page.entries.created == (
+        payload,
+        "123-4567_surgery_incomplete_draft123.json",
+        SURGERY_ATTACHMENT_CAPTION,
+    )
 
 
 def test_save_surgery_attachment_overwrites_selected_entry() -> None:

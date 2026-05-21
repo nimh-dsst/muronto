@@ -4,6 +4,7 @@ import re
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, time
 from typing import Any, TypedDict
+from uuid import uuid4
 
 import streamlit as st
 from labapi import ApiError
@@ -122,7 +123,11 @@ from muronto_app.surgery import (
     SURGERY_CATEGORY_KEY,
     SURGERY_CATEGORY_OPTIONS,
     SURGERY_DATE_KEY,
+    SURGERY_DRAFT_ID_KEY,
+    SURGERY_STATUS_INCOMPLETE,
+    SURGERY_STATUS_KEY,
     SURGERY_TIME_PATTERN,
+    SURGERY_VALIDATION_ERRORS_KEY,
     SURGICAL_PROCEDURES_KEY,
     TAKEN_PHOTO_UPLOAD_TYPE,
     VIRAL_INJECTION_CATEGORY,
@@ -144,6 +149,7 @@ from muronto_app.surgery import (
     format_surgery_time_display,
     medication_names,
     procedure_option_values,
+    surgery_record_file_token,
     with_surgery_options,
 )
 
@@ -268,16 +274,41 @@ def surgery_record_widget_key(record: SurgeryRecord) -> str:
 
 def surgery_record_label(record: SurgeryRecord) -> str:
     payload = record.payload
-    surgery_date = clean_string(payload.get(SURGERY_DATE_KEY)) or "Unknown"
+    surgery_date = clean_string(payload.get(SURGERY_DATE_KEY))
+    label = surgery_date or "Incomplete draft"
     surgeon = clean_string(payload.get(SURGEON_KEY))
     if surgeon:
-        return f"{surgery_date} - {surgeon}"
-    return surgery_date
+        label = f"{label} - {surgeon}"
+
+    if clean_string(payload.get(SURGERY_STATUS_KEY)) == (
+        SURGERY_STATUS_INCOMPLETE
+    ):
+        label = f"{label} (incomplete)"
+    return label
 
 
 def stable_key_part(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
     return cleaned[:48] or "value"
+
+
+def surgery_draft_id(
+    *,
+    form_key: str,
+    payload_defaults: Mapping[str, Any],
+) -> str:
+    existing_draft_id = clean_string(
+        payload_defaults.get(SURGERY_DRAFT_ID_KEY)
+    )
+    if existing_draft_id:
+        return existing_draft_id
+
+    state_key = surgery_key(form_key, "draft_id")
+    draft_id = clean_string(st.session_state.get(state_key))
+    if not draft_id:
+        draft_id = uuid4().hex[:12]
+        st.session_state[state_key] = draft_id
+    return draft_id
 
 
 def sanitize_upload_filename(filename: str) -> str:
@@ -1879,7 +1910,9 @@ def save_general_surgery_attachments(
     attachment_values: GeneralNotesAttachmentValues,
 ) -> list[dict[str, str]]:
     animal_id = clean_string(payload.get(ANIMAL_ID_KEY))
-    surgery_date = clean_string(payload.get(SURGERY_DATE_KEY))
+    surgery_date = surgery_record_file_token(payload)
+    if not surgery_date:
+        raise ValueError("surgery_date or surgery_draft_id is required.")
     attachment_inputs: list[tuple[str, int, Any, str, str]] = []
 
     for index, uploaded_file in enumerate(
@@ -2211,8 +2244,15 @@ def render_surgery_form(
     if not submitted:
         return
 
+    draft_id = surgery_draft_id(
+        form_key=form_key,
+        payload_defaults=payload_defaults,
+    )
+
     def build_payload(
         attachments: list[dict[str, str]],
+        *,
+        allow_incomplete: bool,
     ) -> dict[str, Any]:
         return build_surgery_payload(
             project_id=project[PROJECT_ID_KEY],
@@ -2234,15 +2274,37 @@ def render_surgery_form(
                 "bregma_lambda_dist_mm"
             ],
             surgical_procedures=surgical_procedures,
+            allow_incomplete=allow_incomplete,
+            draft_id=draft_id if allow_incomplete else "",
         )
 
-    try:
-        payload = build_payload([])
-    except SurgeryValidationError as exc:
-        st.error("Complete the surgery form before saving the record.")
-        for error in exc.errors:
-            st.caption(error)
-        return
+    def build_payload_for_save(
+        attachments: list[dict[str, str]],
+    ) -> tuple[dict[str, Any], list[str]]:
+        try:
+            return (
+                build_payload(
+                    attachments,
+                    allow_incomplete=False,
+                ),
+                [],
+            )
+        except SurgeryValidationError:
+            incomplete_payload = build_payload(
+                attachments,
+                allow_incomplete=True,
+            )
+            validation_errors = [
+                error
+                for error in incomplete_payload.get(
+                    SURGERY_VALIDATION_ERRORS_KEY,
+                    [],
+                )
+                if isinstance(error, str) and error
+            ]
+            return incomplete_payload, validation_errors
+
+    payload, validation_errors = build_payload_for_save([])
 
     try:
         has_uploads = has_new_attachment_uploads(general_attachment_values)
@@ -2281,15 +2343,17 @@ def render_surgery_form(
         )
         if resolved_attachment_references is None:
             return
-        payload = build_payload(resolved_attachment_references)
-    except SurgeryValidationError as exc:
-        st.error("Complete the surgery form before saving the record.")
-        for error in exc.errors:
-            st.caption(error)
-        return
+        payload, validation_errors = build_payload_for_save(
+            resolved_attachment_references
+        )
     except ValueError as exc:
         st.error(f"Unable to upload surgery attachment: {exc}")
         return
+
+    is_incomplete = (
+        clean_string(payload.get(SURGERY_STATUS_KEY))
+        == SURGERY_STATUS_INCOMPLETE
+    )
 
     try:
         result = save_surgery_attachment(
@@ -2346,6 +2410,13 @@ def render_surgery_form(
         )
 
     action = "Created" if result.created else "Updated"
+    if is_incomplete:
+        st.warning(
+            "Saved an incomplete surgery record. Return to Edit existing "
+            "surgery record to complete it."
+        )
+        for error in validation_errors:
+            st.caption(error)
     st.success(f"{action} surgery record for `{payload[ANIMAL_ID_KEY]}`.")
     with st.expander("Surgery JSON", expanded=True):
         st.json(payload)

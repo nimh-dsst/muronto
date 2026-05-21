@@ -35,7 +35,12 @@ from muronto_app.state import (
     USER_STATE_KEY,
 )
 from muronto_app.subject import SUBJECT_ATTACHMENT_CAPTION
-from muronto_app.surgery import SURGERY_ATTACHMENT_CAPTION
+from muronto_app.surgery import (
+    SURGERY_ATTACHMENT_CAPTION,
+    SURGERY_STATUS_INCOMPLETE,
+    SURGERY_STATUS_KEY,
+    SURGERY_VALIDATION_ERRORS_KEY,
+)
 
 
 @dataclass
@@ -451,6 +456,7 @@ def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     surgery_text_entry = page_surgery_text_entry(subject_page)
     created_payload = attachment_payload(surgery_entry)
     assert created_payload["general_notes"] == "initial note"
+    assert SURGERY_STATUS_KEY not in created_payload
     assert "initial note" in surgery_text_entry.content
 
     app.toggle(key="surgery_edit_existing").set_value(True).run()
@@ -468,6 +474,7 @@ def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     assert not app.exception
     edited_payload = attachment_payload(surgery_entry)
     assert edited_payload["general_notes"] == "edited note"
+    assert SURGERY_STATUS_KEY not in edited_payload
     assert surgery_entry.filename == "123-4567_surgery_20260511.json"
     assert (
         len(
@@ -482,3 +489,24 @@ def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     )
     assert "edited note" in surgery_text_entry.content
     assert "initial note" not in surgery_text_entry.content
+
+
+def test_surgery_page_saves_and_edits_incomplete_record() -> None:
+    subject_page = seed_subject_page()
+    app = surgery_page_app(FakeHomeFolder([subject_page])).run()
+
+    app.date_input(key="surgery_date").set_value(date(2026, 5, 12))
+    app.button(key="surgery_submit").click().run()
+
+    assert not app.exception
+    payload = attachment_payload(page_surgery_attachment(subject_page))
+    assert payload[SURGERY_STATUS_KEY] == SURGERY_STATUS_INCOMPLETE
+    assert "preop_cnn is required." in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    assert payload["weight_pre_g"] is None
+
+    surgery_entry = page_surgery_attachment(subject_page)
+    app.toggle(key="surgery_edit_existing").set_value(True).run()
+    edit_form_key = f"surgery_edit_{surgery_entry.id.replace('-', '_')}"
+
+    assert app.text_input(key=f"{edit_form_key}_preop_cnn").value == ""
+    assert app.number_input(key=f"{edit_form_key}_weight_pre_g").value is None

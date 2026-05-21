@@ -37,9 +37,13 @@ from muronto_app.surgery import (
     IMPLANT_CATEGORY,
     MIME_TYPE_KEY,
     NOTE_UPLOAD_TYPE,
+    SURGERY_DRAFT_ID_KEY,
     SURGERY_FILE_ATTACHMENT_CAPTION,
+    SURGERY_STATUS_INCOMPLETE,
+    SURGERY_STATUS_KEY,
     SURGERY_TIME_PATTERN,
     SURGERY_TIME_PATTERN_TEXT,
+    SURGERY_VALIDATION_ERRORS_KEY,
     UPLOAD_TYPE_KEY,
     VIRAL_INJECTION_CATEGORY,
     SurgeryValidationError,
@@ -50,6 +54,7 @@ from muronto_app.surgery import (
     medication_names,
     procedure_option_values,
     surgery_json_filename,
+    surgery_record_file_token,
     with_surgeon_options,
     with_surgery_options,
 )
@@ -559,6 +564,31 @@ def test_build_surgery_payload_requires_date() -> None:
         build_surgery_payload(**kwargs)
 
     assert "surgery_date must be selected." in exc_info.value.errors
+
+
+def test_build_surgery_payload_can_mark_incomplete_draft() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgery_date"] = None
+    kwargs["preop_cnn"] = ""
+    kwargs["weight_pre_g"] = None
+
+    payload = build_surgery_payload(
+        **kwargs,
+        allow_incomplete=True,
+        draft_id="draft123",
+    )
+
+    assert payload[SURGERY_STATUS_KEY] == SURGERY_STATUS_INCOMPLETE
+    assert payload[SURGERY_DRAFT_ID_KEY] == "draft123"
+    assert payload["surgery_date"] == ""
+    assert payload["preop_cnn"] == ""
+    assert payload["weight_pre_g"] is None
+    assert (
+        "surgery_date must be selected."
+        in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    )
+    assert "preop_cnn is required." in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    assert surgery_record_file_token(payload) == "incomplete_draft123"
 
 
 def test_build_surgery_payload_requires_perioperative_fields() -> None:
