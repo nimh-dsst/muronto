@@ -887,7 +887,7 @@ def render_perioperative_monitoring(
             value=parse_surgery_time(defaults.get(END_TIME_KEY)),
         )
         bregma_lambda_dist_mm = st.number_input(
-            "Bregma Lambda Distance (mm)",
+            "Bregma-Lambda Distance (mm)",
             min_value=0.0,
             value=number_default(defaults.get(BREGMA_LAMBDA_DIST_MM_KEY)),
             step=0.1,
