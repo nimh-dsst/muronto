@@ -59,6 +59,7 @@ from muronto_app.subject import (
     GENOTYPE_KEY,
     SEX_KEY,
     STRAIN_OPTIONS_KEY,
+    is_subject_incomplete,
 )
 from muronto_app.surgery import (
     AP_KEY,
@@ -816,13 +817,16 @@ def render_virus_multiselect(
 
 
 def subject_label(record: SubjectRecord) -> str:
-    animal_id = record.payload.get(ANIMAL_ID_KEY, "Unknown")
-    ear_tag = record.payload.get(EAR_TAG_KEY, "")
-    return f"{animal_id} - Ear Tag {ear_tag}" if ear_tag else animal_id
+    animal_id = clean_string(record.payload.get(ANIMAL_ID_KEY)) or "Unknown"
+    ear_tag = clean_string(record.payload.get(EAR_TAG_KEY))
+    label = f"{animal_id} - Ear Tag {ear_tag}" if ear_tag else animal_id
+    if is_subject_incomplete(record.payload):
+        label = f"{label} (incomplete)"
+    return label
 
 
 def subject_strain_genotypes(
-    payload: dict[str, str],
+    payload: dict[str, Any],
 ) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
     index = 1

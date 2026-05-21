@@ -9,7 +9,12 @@ from typing import Any
 import pytest
 import streamlit as st
 
-from muronto_app.subject import ANIMAL_ID_KEY
+from muronto_app.subject import (
+    ANIMAL_ID_KEY,
+    EAR_TAG_KEY,
+    SUBJECT_STATUS_INCOMPLETE,
+    SUBJECT_STATUS_KEY,
+)
 from muronto_app.surgery import (
     CAPTION_KEY,
     ENTRY_ID_KEY,
@@ -91,6 +96,24 @@ def test_taken_photo_slot_helpers_add_and_remove_widgets(
     assert state[surgery_page.SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY] == [3]
     assert state[surgery_page.SURGERY_TAKEN_PHOTO_COUNT_KEY] == 1
     assert state[surgery_page.SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY] == 4
+
+
+def test_subject_label_marks_incomplete_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    surgery_page = load_surgery_page_module(monkeypatch)
+    record = SimpleNamespace(
+        payload={
+            ANIMAL_ID_KEY: "123-4567",
+            EAR_TAG_KEY: "123",
+            SUBJECT_STATUS_KEY: SUBJECT_STATUS_INCOMPLETE,
+        }
+    )
+
+    assert (
+        surgery_page.subject_label(record)
+        == "123-4567 - Ear Tag 123 (incomplete)"
+    )
 
 
 def test_save_general_surgery_attachments_supports_multiple_taken_photos(

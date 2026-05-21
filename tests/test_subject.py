@@ -11,6 +11,9 @@ from muronto_app.config import (
     STRAIN_OPTIONS_KEY,
 )
 from muronto_app.subject import (
+    SUBJECT_STATUS_INCOMPLETE,
+    SUBJECT_STATUS_KEY,
+    SUBJECT_VALIDATION_ERRORS_KEY,
     SubjectValidationError,
     build_subject_payload,
     with_subject_options,
@@ -39,6 +42,64 @@ def test_build_subject_payload_formats_dates_and_suffixes_pairs() -> None:
     assert payload["dob"] == "20240102"
     assert payload["dow"] == "20240109"
     assert payload["parent_ccn"] == "654321"
+    assert SUBJECT_STATUS_KEY not in payload
+    assert SUBJECT_VALIDATION_ERRORS_KEY not in payload
+
+
+def test_build_subject_payload_can_mark_incomplete_subject() -> None:
+    payload = build_subject_payload(
+        animal_id="123-4567",
+        ear_tag="",
+        ccn="",
+        sex="",
+        strain_genotypes=[("", "")],
+        dob=None,
+        dow=None,
+        source_type="",
+        parent_ccn="",
+        allow_incomplete=True,
+    )
+
+    assert payload["animal_id"] == "123-4567"
+    assert payload["ear_tag"] == ""
+    assert payload["ccn"] == ""
+    assert payload["sex"] == ""
+    assert payload["strain_1"] == ""
+    assert payload["genotype_1"] == ""
+    assert payload["dob"] == ""
+    assert payload["dow"] == ""
+    assert payload["source_type"] == ""
+    assert payload[SUBJECT_STATUS_KEY] == SUBJECT_STATUS_INCOMPLETE
+    assert "ear_tag is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "ccn is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "sex is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "strain_1 is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "genotype_1 is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "dob must be selected." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "dow must be selected." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "source_type is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+
+
+def test_build_subject_payload_requires_valid_animal_id_when_incomplete() -> (
+    None
+):
+    with pytest.raises(SubjectValidationError) as exc_info:
+        build_subject_payload(
+            animal_id="1234567",
+            ear_tag="",
+            ccn="",
+            sex="",
+            strain_genotypes=[],
+            dob=None,
+            dow=None,
+            source_type="",
+            parent_ccn="",
+            allow_incomplete=True,
+        )
+
+    assert any(
+        "animal_id must match" in error for error in exc_info.value.errors
+    )
 
 
 def test_build_subject_payload_requires_breeding_parent_ccn() -> None:

@@ -29,6 +29,11 @@ PARENT_CCN_KEY: Final[str] = "parent_ccn"
 
 SUBJECT_ATTACHMENT_CAPTION: Final[str] = "muronto_subject"
 
+SUBJECT_STATUS_KEY: Final[str] = "subject_status"
+SUBJECT_STATUS_COMPLETE: Final[str] = "complete"
+SUBJECT_STATUS_INCOMPLETE: Final[str] = "incomplete"
+SUBJECT_VALIDATION_ERRORS_KEY: Final[str] = "validation_errors"
+
 ANIMAL_ID_PATTERN_TEXT: Final[str] = r"\d\d\d-\d\d\d\d"
 EAR_TAG_PATTERN_TEXT: Final[str] = r"\d\d\d"
 CCN_PATTERN_TEXT: Final[str] = r"\d\d\d\d\d\d"
@@ -57,6 +62,13 @@ class SubjectValidationError(ValueError):
 def subject_json_filename(animal_id: str) -> str:
     """Return the stable JSON filename for a subject page attachment."""
     return f"{animal_id}.json"
+
+
+def is_subject_incomplete(payload: Mapping[str, Any]) -> bool:
+    """Return whether a subject payload is marked as incomplete."""
+    return clean_string(payload.get(SUBJECT_STATUS_KEY)) == (
+        SUBJECT_STATUS_INCOMPLETE
+    )
 
 
 def format_subject_date(value: date) -> str:
@@ -124,7 +136,8 @@ def build_subject_payload(
     dow: date | None,
     source_type: str,
     parent_ccn: str = "",
-) -> dict[str, str]:
+    allow_incomplete: bool = False,
+) -> dict[str, Any]:
     """Validate form values and return the flat subject JSON payload."""
     cleaned_animal_id = clean_string(animal_id)
     cleaned_ear_tag = clean_string(ear_tag)
@@ -132,6 +145,7 @@ def build_subject_payload(
     cleaned_sex = clean_string(sex)
     cleaned_source_type = clean_string(source_type)
     cleaned_parent_ccn = clean_string(parent_ccn)
+    animal_id_errors: list[str] = []
     errors: list[str] = []
 
     _validate_pattern(
@@ -140,7 +154,7 @@ def build_subject_payload(
         pattern=ANIMAL_ID_PATTERN,
         pattern_text=ANIMAL_ID_PATTERN_TEXT,
         example="123-4567",
-        errors=errors,
+        errors=animal_id_errors,
     )
     _validate_pattern(
         field_name=EAR_TAG_KEY,
@@ -209,10 +223,16 @@ def build_subject_payload(
         errors=errors,
     )
 
-    if errors:
-        raise SubjectValidationError(errors)
+    if animal_id_errors:
+        if allow_incomplete:
+            raise SubjectValidationError(animal_id_errors)
+        raise SubjectValidationError([*animal_id_errors, *errors])
 
-    payload = {
+    if errors:
+        if not allow_incomplete:
+            raise SubjectValidationError(errors)
+
+    payload: dict[str, Any] = {
         ANIMAL_ID_KEY: cleaned_animal_id,
         EAR_TAG_KEY: cleaned_ear_tag,
         CCN_KEY: cleaned_ccn,
@@ -226,15 +246,18 @@ def build_subject_payload(
     payload[DOW_KEY] = formatted_dow
     payload[SOURCE_TYPE_KEY] = cleaned_source_type
     payload[PARENT_CCN_KEY] = cleaned_parent_ccn
+    if errors:
+        payload[SUBJECT_STATUS_KEY] = SUBJECT_STATUS_INCOMPLETE
+        payload[SUBJECT_VALIDATION_ERRORS_KEY] = list(errors)
     return payload
 
 
-def subject_strains(payload: Mapping[str, str]) -> list[str]:
+def subject_strains(payload: Mapping[str, Any]) -> list[str]:
     """Return strain values from a flat subject payload in suffix order."""
     strains: list[str] = []
     index = 1
     while f"{STRAIN_OPTIONS_KEY}_{index}" in payload:
-        strains.append(payload[f"{STRAIN_OPTIONS_KEY}_{index}"])
+        strains.append(clean_string(payload[f"{STRAIN_OPTIONS_KEY}_{index}"]))
         index += 1
     return strains
 

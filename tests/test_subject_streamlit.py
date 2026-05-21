@@ -34,7 +34,12 @@ from muronto_app.state import (
     SELECTED_NOTEBOOK_STATE_KEY,
     USER_STATE_KEY,
 )
-from muronto_app.subject import SUBJECT_ATTACHMENT_CAPTION
+from muronto_app.subject import (
+    SUBJECT_ATTACHMENT_CAPTION,
+    SUBJECT_STATUS_INCOMPLETE,
+    SUBJECT_STATUS_KEY,
+    SUBJECT_VALIDATION_ERRORS_KEY,
+)
 
 
 @dataclass
@@ -226,7 +231,7 @@ def subject_page_app(home_folder: FakeHomeFolder) -> AppTest:
     return app
 
 
-def attachment_payload(entry: FakeAttachmentEntry) -> dict[str, str]:
+def attachment_payload(entry: FakeAttachmentEntry) -> dict[str, Any]:
     attachment = entry.get_attachment()
     try:
         return json.loads(attachment.read().decode("utf-8"))
@@ -257,6 +262,10 @@ def error_values(app: AppTest) -> list[str]:
     return [error.value for error in app.error]
 
 
+def warning_values(app: AppTest) -> list[str]:
+    return [warning.value for warning in app.warning]
+
+
 def test_subject_page_immediately_validates_regex_fields() -> None:
     app = subject_page_app(FakeHomeFolder()).run()
 
@@ -276,8 +285,7 @@ def test_subject_page_immediately_validates_regex_fields() -> None:
     )
     assert any("ccn must match the regex pattern" in error for error in errors)
     assert any(
-        "parent_ccn must match the regex pattern" in error
-        for error in errors
+        "parent_ccn must match the regex pattern" in error for error in errors
     )
 
     app.text_input(key="subject_create_animal_id").set_value("123-4567")
@@ -329,3 +337,45 @@ def test_subject_page_create_then_edit_updates_json_and_text() -> None:
     assert subject_entry.filename == "123-4567.json"
     assert "654321" in text_entry.content
     assert "123456" not in text_entry.content
+
+
+def test_subject_page_saves_and_completes_incomplete_record() -> None:
+    home_folder = FakeHomeFolder()
+    app = subject_page_app(home_folder).run()
+
+    app.text_input(key="subject_create_animal_id").set_value("123-4567")
+    app.button(key="subject_create_submit").click().run()
+
+    assert not app.exception
+    assert len(home_folder.children) == 1
+    page = home_folder.children[0]
+    subject_entry = page_subject_attachment(page)
+    payload = attachment_payload(subject_entry)
+    assert payload[SUBJECT_STATUS_KEY] == SUBJECT_STATUS_INCOMPLETE
+    assert "ear_tag is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "ccn is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert any(
+        "Saved an incomplete subject record" in warning
+        for warning in warning_values(app)
+    )
+
+    app.toggle(key="subject_edit_existing").set_value(True).run()
+    edit_form_key = f"subject_edit_{page.id}"
+    assert app.text_input(key=f"{edit_form_key}_ear_tag").value == ""
+    assert app.text_input(key=f"{edit_form_key}_ccn").value == ""
+
+    app.text_input(key=f"{edit_form_key}_ear_tag").set_value("123")
+    app.text_input(key=f"{edit_form_key}_ccn").set_value("123456")
+    app.selectbox(key=f"{edit_form_key}_strain_1").select("Ai14")
+    app.date_input(key=f"{edit_form_key}_dob").set_value(date(2024, 1, 2))
+    app.date_input(key=f"{edit_form_key}_dow").set_value(date(2024, 1, 9))
+    app.text_input(key=f"{edit_form_key}_parent_ccn").set_value("654321")
+    app.button(key=f"{edit_form_key}_submit").click().run()
+
+    assert not app.exception
+    completed_payload = attachment_payload(subject_entry)
+    assert completed_payload["animal_id"] == "123-4567"
+    assert completed_payload["ear_tag"] == "123"
+    assert completed_payload["ccn"] == "123456"
+    assert SUBJECT_STATUS_KEY not in completed_payload
+    assert SUBJECT_VALIDATION_ERRORS_KEY not in completed_payload

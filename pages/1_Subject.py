@@ -53,9 +53,11 @@ from muronto_app.subject import (
     PARENT_REQUIRED_SOURCE_TYPE,
     SEX_KEY,
     SEX_OPTIONS,
+    SUBJECT_VALIDATION_ERRORS_KEY,
     SubjectValidationError,
     build_subject_payload,
     format_subject_date,
+    is_subject_incomplete,
     subject_strains,
     with_subject_options,
 )
@@ -99,9 +101,12 @@ def selected_index(options: Sequence[str], value: str) -> int:
 
 
 def subject_label(record: SubjectRecord) -> str:
-    animal_id = record.payload.get(ANIMAL_ID_KEY, "Unknown")
-    ear_tag = record.payload.get(EAR_TAG_KEY, "")
-    return f"{animal_id} - Ear Tag {ear_tag}" if ear_tag else animal_id
+    animal_id = clean_string(record.payload.get(ANIMAL_ID_KEY)) or "Unknown"
+    ear_tag = clean_string(record.payload.get(EAR_TAG_KEY))
+    label = f"{animal_id} - Ear Tag {ear_tag}" if ear_tag else animal_id
+    if is_subject_incomplete(record.payload):
+        label = f"{label} (incomplete)"
+    return label
 
 
 def subject_record_widget_key(record: SubjectRecord) -> str:
@@ -123,7 +128,7 @@ def parse_subject_date(value: object) -> date | None:
 
 
 def subject_strain_genotypes(
-    payload: dict[str, str],
+    payload: dict[str, Any],
 ) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
     index = 1
@@ -255,12 +260,12 @@ def save_reusable_subject_options(
     *,
     notebook: Any,
     config: dict[str, Any],
-    payload: dict[str, str],
+    payload: dict[str, Any],
 ) -> None:
     updated_config, changed = with_subject_options(
         config,
         strains=subject_strains(payload),
-        source_type=payload[SOURCE_TYPE_OPTIONS_KEY],
+        source_type=clean_string(payload.get(SOURCE_TYPE_OPTIONS_KEY)),
     )
     if not changed:
         return
@@ -402,8 +407,8 @@ def render_subject_form(
     if not submitted:
         return
 
-    try:
-        payload = build_subject_payload(
+    def build_payload(*, allow_incomplete: bool) -> dict[str, Any]:
+        return build_subject_payload(
             animal_id=animal_id,
             ear_tag=ear_tag,
             ccn=ccn,
@@ -413,9 +418,28 @@ def render_subject_form(
             dow=dow,
             source_type=source_type,
             parent_ccn=parent_ccn,
+            allow_incomplete=allow_incomplete,
         )
+
+    def build_payload_for_save() -> tuple[dict[str, Any], list[str]]:
+        try:
+            return build_payload(allow_incomplete=False), []
+        except SubjectValidationError:
+            incomplete_payload = build_payload(allow_incomplete=True)
+            validation_errors = [
+                error
+                for error in incomplete_payload.get(
+                    SUBJECT_VALIDATION_ERRORS_KEY,
+                    [],
+                )
+                if isinstance(error, str) and error
+            ]
+            return incomplete_payload, validation_errors
+
+    try:
+        payload, validation_errors = build_payload_for_save()
     except SubjectValidationError as exc:
-        st.error("Complete the subject form before saving the page.")
+        st.error("Enter a valid animal_id before saving the subject page.")
         for error in exc.errors:
             st.caption(error)
         return
@@ -445,6 +469,13 @@ def render_subject_form(
         )
 
     action = "Updated" if is_editing else "Created"
+    if is_subject_incomplete(payload):
+        st.warning(
+            "Saved an incomplete subject record. Return to Edit existing "
+            "subject to complete it."
+        )
+        for error in validation_errors:
+            st.caption(error)
     st.success(f"{action} subject page `{result.page.name}`.")
     with st.expander("Subject JSON", expanded=True):
         st.json(payload)

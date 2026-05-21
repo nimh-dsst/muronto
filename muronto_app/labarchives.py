@@ -31,6 +31,7 @@ from muronto_app.subject import (
     ANIMAL_ID_KEY,
     EAR_TAG_KEY,
     SUBJECT_ATTACHMENT_CAPTION,
+    SUBJECT_VALIDATION_ERRORS_KEY,
     subject_json_filename,
 )
 from muronto_app.surgery import (
@@ -71,7 +72,7 @@ class SubjectRecord:
     """A subject JSON payload paired with its LabArchives page."""
 
     page: Any
-    payload: dict[str, str]
+    payload: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -462,7 +463,7 @@ def save_subject_attachment(
     return SubjectWriteResult(page=page, attachment_entry=attachment_entry)
 
 
-def read_subject_attachment(page: Any) -> dict[str, str] | None:
+def read_subject_attachment(page: Any) -> dict[str, Any] | None:
     """Read a page's subject JSON attachment when it is valid enough for UI."""
     entry = find_subject_attachment(page)
     if entry is None:
@@ -476,11 +477,21 @@ def read_subject_attachment(page: Any) -> dict[str, str] | None:
     if not isinstance(decoded, Mapping):
         return None
 
-    payload = {
-        clean_string(key): clean_string(value)
-        for key, value in decoded.items()
-        if clean_string(key)
-    }
+    payload: dict[str, Any] = {}
+    for raw_key, raw_value in decoded.items():
+        key = clean_string(raw_key)
+        if not key:
+            continue
+        if key == SUBJECT_VALIDATION_ERRORS_KEY and isinstance(
+            raw_value,
+            list,
+        ):
+            payload[key] = [
+                error for value in raw_value if (error := clean_string(value))
+            ]
+            continue
+        payload[key] = clean_string(raw_value)
+
     if not payload.get(ANIMAL_ID_KEY):
         return None
     return payload
