@@ -63,7 +63,8 @@ WEIGHT_POST_G_KEY: Final[str] = "weight_post_g"
 MEDICATIONS_KEY: Final[str] = "medications"
 MEDICATION_KEY: Final[str] = "medication"
 CONC_MGML_KEY: Final[str] = "conc_mgml"
-VOLUME_KEY: Final[str] = "volume"
+VOLUME_KEY: Final[str] = "volume_ml"
+LEGACY_VOLUME_KEY: Final[str] = "volume"
 START_TIME_KEY: Final[str] = "start_time"
 END_TIME_KEY: Final[str] = "end_time"
 BREGMA_LAMBDA_DIST_MM_KEY: Final[str] = "bregma_lambda_dist_mm"
@@ -306,6 +307,36 @@ def _format_time_or_error(
     return format_surgery_time(value)
 
 
+def medication_volume_value(raw_medication: Mapping[str, object]) -> object:
+    """Return the medication volume, accepting the legacy ``volume`` key."""
+    if VOLUME_KEY in raw_medication:
+        return raw_medication.get(VOLUME_KEY)
+    return raw_medication.get(LEGACY_VOLUME_KEY)
+
+
+def normalize_surgery_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a surgery payload with current medication field names."""
+    normalized = dict(payload)
+    raw_medications = normalized.get(MEDICATIONS_KEY)
+    if not isinstance(raw_medications, list):
+        return normalized
+
+    medications: list[Any] = []
+    for raw_medication in raw_medications:
+        if not isinstance(raw_medication, Mapping):
+            medications.append(raw_medication)
+            continue
+
+        medication = dict(raw_medication)
+        if VOLUME_KEY not in medication and LEGACY_VOLUME_KEY in medication:
+            medication[VOLUME_KEY] = medication[LEGACY_VOLUME_KEY]
+        medication.pop(LEGACY_VOLUME_KEY, None)
+        medications.append(medication)
+
+    normalized[MEDICATIONS_KEY] = medications
+    return normalized
+
+
 def _validate_medications(
     raw_medications: Iterable[Mapping[str, object]],
     errors: list[str],
@@ -327,7 +358,7 @@ def _validate_medications(
         )
         volume = _validate_non_negative_number(
             field_name=f"{VOLUME_KEY}_{index}",
-            value=raw_medication.get(VOLUME_KEY),
+            value=medication_volume_value(raw_medication),
             errors=errors,
             allow_incomplete=allow_incomplete,
         )

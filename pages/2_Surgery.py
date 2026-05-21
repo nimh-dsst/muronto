@@ -155,6 +155,7 @@ from muronto_app.surgery import (
     format_surgery_time,
     format_surgery_time_display,
     medication_names,
+    medication_volume_value,
     procedure_option_values,
     surgery_record_file_token,
     with_surgery_options,
@@ -896,7 +897,7 @@ def render_medications(
         volume = st.number_input(
             "Volume (ml)",
             min_value=0.0,
-            value=number_default(medication_defaults.get(VOLUME_KEY)),
+            value=number_default(medication_volume_value(medication_defaults)),
             step=0.01,
             key=surgery_key(form_key, f"medication_{index}_volume"),
         )

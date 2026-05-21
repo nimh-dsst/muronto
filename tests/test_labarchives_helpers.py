@@ -535,6 +535,25 @@ def test_save_surgery_attachment_creates_and_updates_by_filename() -> None:
     )
 
 
+def test_save_surgery_attachment_writes_current_volume_key() -> None:
+    page = FakePage([], name="123-4567")
+    payload = {
+        "animal_id": "123-4567",
+        "surgery_date": "20260511",
+        "medications": [
+            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+        ],
+    }
+
+    save_surgery_attachment(page, payload)
+
+    assert page.entries.created is not None
+    created_payload = page.entries.created[0]
+    assert created_payload["medications"] == [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
+    ]
+
+
 def test_save_surgery_attachment_updates_reference_text_entry() -> None:
     entry = FakeEntry(
         {
@@ -590,6 +609,9 @@ def test_discover_surgery_records_on_subject_page() -> None:
         "surgeon": "SL",
         "surgery_date": "20260511",
         "general_notes": "baseline",
+        "medications": [
+            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+        ],
     }
     page = FakePage(
         [
@@ -609,6 +631,9 @@ def test_discover_surgery_records_on_subject_page() -> None:
     assert records[0].attachment_entry is page.entries[0]
     assert records[0].payload["surgery_date"] == "20260511"
     assert records[0].payload["general_notes"] == "baseline"
+    assert records[0].payload["medications"] == [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
+    ]
 
 
 def test_discover_surgery_records_includes_incomplete_drafts() -> None:

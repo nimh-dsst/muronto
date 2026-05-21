@@ -46,6 +46,7 @@ from muronto_app.surgery import (
     SURGERY_FILE_ATTACHMENT_CAPTION,
     SURGERY_FILE_UPLOAD_TYPES,
     UPLOAD_TYPE_KEY,
+    normalize_surgery_payload,
     surgery_json_filename,
     surgery_record_file_token,
 )
@@ -548,11 +549,13 @@ def read_surgery_attachment(entry: Any) -> dict[str, Any] | None:
     if not isinstance(decoded, Mapping):
         return None
 
-    payload = {
-        key: value
-        for raw_key, value in decoded.items()
-        if (key := clean_string(raw_key))
-    }
+    payload = normalize_surgery_payload(
+        {
+            key: value
+            for raw_key, value in decoded.items()
+            if (key := clean_string(raw_key))
+        }
+    )
     if not payload.get(ANIMAL_ID_KEY) or not surgery_record_file_token(
         payload
     ):
@@ -597,8 +600,9 @@ def save_surgery_attachment(
     existing_entry: Any | None = None,
 ) -> SurgeryWriteResult:
     """Create or update a surgery JSON attachment on a subject page."""
-    animal_id = clean_string(surgery_payload.get(ANIMAL_ID_KEY))
-    file_token = surgery_record_file_token(surgery_payload)
+    normalized_payload = normalize_surgery_payload(surgery_payload)
+    animal_id = clean_string(normalized_payload.get(ANIMAL_ID_KEY))
+    file_token = surgery_record_file_token(normalized_payload)
     if not animal_id:
         raise ValueError(f"{ANIMAL_ID_LABEL} is required.")
     if not file_token:
@@ -608,13 +612,13 @@ def save_surgery_attachment(
     entry_to_update = existing_entry or find_surgery_attachment(page, filename)
     if entry_to_update is not None:
         entry_to_update.content = _json_attachment_content(
-            surgery_payload,
+            normalized_payload,
             filename=filename,
             caption=SURGERY_ATTACHMENT_CAPTION,
         )
         _sync_json_reference_text_entry(
             page,
-            surgery_payload,
+            normalized_payload,
             attachment_entry=entry_to_update,
             caption=SURGERY_ATTACHMENT_CAPTION,
         )
@@ -625,7 +629,7 @@ def save_surgery_attachment(
         )
 
     attachment_entry, _text_entry = page.entries.create_json_entry(
-        dict(surgery_payload),
+        normalized_payload,
         filename=filename,
         caption=SURGERY_ATTACHMENT_CAPTION,
     )

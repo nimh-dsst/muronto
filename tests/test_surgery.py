@@ -163,7 +163,7 @@ def valid_surgery_kwargs() -> dict[str, Any]:
         "weight_pre_g": 25.1,
         "weight_post_g": 24.8,
         "medications": [
-            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
         ],
         "start_time": time(9, 0),
         "end_time": time(14, 0),
@@ -231,7 +231,7 @@ def test_build_surgery_payload_formats_date_and_values() -> None:
         "weight_pre_g": 25.1,
         "weight_post_g": 24.8,
         "medications": [
-            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
         ],
         "start_time": "0900",
         "end_time": "1400",
@@ -527,17 +527,38 @@ def test_build_surgery_payload_supports_not_applicable_flow_test() -> None:
 def test_build_surgery_payload_supports_multiple_medications() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["medications"] = [
-        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1},
-        {"medication": "Dexamethasone", "conc_mgml": 2.0, "volume": 0.05},
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1},
+        {
+            "medication": "Dexamethasone",
+            "conc_mgml": 2.0,
+            "volume_ml": 0.05,
+        },
     ]
 
     payload = build_surgery_payload(**kwargs)
 
     assert payload["medications"] == [
-        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1},
-        {"medication": "Dexamethasone", "conc_mgml": 2.0, "volume": 0.05},
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1},
+        {
+            "medication": "Dexamethasone",
+            "conc_mgml": 2.0,
+            "volume_ml": 0.05,
+        },
     ]
     assert medication_names(payload) == ["Meloxicam", "Dexamethasone"]
+
+
+def test_build_surgery_payload_accepts_legacy_medication_volume_key() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["medications"] = [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+    ]
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload["medications"] == [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
+    ]
 
 
 def test_build_surgery_payload_validates_cnn_patterns() -> None:
@@ -881,7 +902,7 @@ def test_build_surgery_payload_validates_stock_titer_pattern() -> None:
 def test_build_surgery_payload_validates_medication_rows() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["medications"] = [
-        {"medication": "", "conc_mgml": None, "volume": -1}
+        {"medication": "", "conc_mgml": None, "volume_ml": -1}
     ]
 
     with pytest.raises(SurgeryValidationError) as exc_info:
@@ -889,7 +910,7 @@ def test_build_surgery_payload_validates_medication_rows() -> None:
 
     assert "medication_1 is required." in exc_info.value.errors
     assert "conc_mgml_1 is required." in exc_info.value.errors
-    assert "volume_1 must be non-negative." in exc_info.value.errors
+    assert "volume_ml_1 must be non-negative." in exc_info.value.errors
 
 
 def test_build_surgery_payload_validates_attachment_references() -> None:

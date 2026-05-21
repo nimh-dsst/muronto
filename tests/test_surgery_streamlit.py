@@ -385,8 +385,7 @@ def test_surgery_page_immediately_validates_regex_fields() -> None:
         for error in errors
     )
     assert any(
-        "Stock Titer must match the regex pattern" in error
-        for error in errors
+        "Stock Titer must match the regex pattern" in error for error in errors
     )
 
     app.text_input(key="surgery_preop_cnn").set_value("123456")
@@ -496,6 +495,9 @@ def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     surgery_text_entry = page_surgery_text_entry(subject_page)
     created_payload = attachment_payload(surgery_entry)
     assert created_payload["general_notes"] == "initial note"
+    assert created_payload["medications"] == [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
+    ]
     assert SURGERY_STATUS_KEY not in created_payload
     assert "initial note" in surgery_text_entry.content
 
@@ -514,6 +516,9 @@ def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     assert not app.exception
     edited_payload = attachment_payload(surgery_entry)
     assert edited_payload["general_notes"] == "edited note"
+    assert edited_payload["medications"] == [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
+    ]
     assert SURGERY_STATUS_KEY not in edited_payload
     assert surgery_entry.filename == "123-4567_surgery_20260511.json"
     assert (
