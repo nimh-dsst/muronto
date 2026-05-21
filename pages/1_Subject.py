@@ -35,6 +35,8 @@ from muronto_app.subject import (
     CCN_PATTERN_TEXT,
     EAR_TAG_PATTERN_TEXT,
     GENOTYPE_OPTIONS,
+    PARENT_CCN_KEY,
+    PARENT_REQUIRED_SOURCE_TYPE,
     SEX_OPTIONS,
     SubjectValidationError,
     build_subject_payload,
@@ -114,6 +116,17 @@ def render_strain_genotypes(
         strain_genotypes.append((strain, genotype))
 
     return strain_genotypes
+
+
+def render_parent_ccn(source_type: str) -> str:
+    if clean_string(source_type) != PARENT_REQUIRED_SOURCE_TYPE:
+        return ""
+
+    render_text_guidance(
+        f"{PARENT_CCN_KEY} must match the regex pattern "
+        f"`{CCN_PATTERN_TEXT}`, for example `123456`."
+    )
+    return st.text_input(PARENT_CCN_KEY)
 
 
 def save_reusable_subject_options(
@@ -200,11 +213,7 @@ def render_subject_form(
         other_prompt="New source_type",
     )
 
-    render_text_guidance(
-        "parent_ccn must match the regex pattern "
-        f"`{CCN_PATTERN_TEXT}`, for example `123456`."
-    )
-    parent_ccn = st.text_input("parent_ccn")
+    parent_ccn = render_parent_ccn(source_type)
 
     submitted = st.button(
         "Create subject page",
