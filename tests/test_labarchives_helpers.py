@@ -27,6 +27,7 @@ from muronto_app.labarchives import (
     attachment_matches_config,
     create_subject_page_with_json,
     discover_subject_records,
+    discover_surgery_records,
     find_config_attachment,
     find_root_config_page,
     read_config_attachment,
@@ -574,6 +575,84 @@ def test_save_surgery_attachment_updates_reference_text_entry() -> None:
     assert SURGERY_ATTACHMENT_CAPTION in text_entry.updated_content
     assert "Entry ID: surgery-entry" in text_entry.updated_content
     assert "JGL" in text_entry.updated_content
+    assert "old preview" not in text_entry.updated_content
+
+
+def test_discover_surgery_records_on_subject_page() -> None:
+    surgery_payload = {
+        "project_id": "SEASIC",
+        "investigator": "APF",
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "surgeon": "SL",
+        "surgery_date": "20260511",
+        "general_notes": "baseline",
+    }
+    page = FakePage(
+        [
+            FakeEntry(
+                surgery_payload,
+                filename="123-4567_surgery_20260511.json",
+                caption=SURGERY_ATTACHMENT_CAPTION,
+            )
+        ],
+        name="123-4567",
+    )
+
+    records = discover_surgery_records(page)
+
+    assert len(records) == 1
+    assert records[0].page is page
+    assert records[0].attachment_entry is page.entries[0]
+    assert records[0].payload["surgery_date"] == "20260511"
+    assert records[0].payload["general_notes"] == "baseline"
+
+
+def test_save_surgery_attachment_overwrites_selected_entry() -> None:
+    entry = FakeEntry(
+        {
+            "project_id": "SEASIC",
+            "investigator": "APF",
+            "animal_id": "123-4567",
+            "ear_tag": "123",
+            "surgeon": "SL",
+            "surgery_date": "20260511",
+            "preop_cnn": "123456",
+            "postop_cnn": "654321",
+        },
+        filename="123-4567_surgery_20260511.json",
+        caption=SURGERY_ATTACHMENT_CAPTION,
+        entry_id="surgery-entry",
+    )
+    text_entry = FakeTextEntry(
+        "<p>Reference Attachment: surgery</p>"
+        "<p>Entry ID: surgery-entry</p>"
+        "<pre>old preview 20260511</pre>"
+    )
+    page = FakePage([entry, text_entry], name="123-4567")
+
+    result = save_surgery_attachment(
+        page,
+        {
+            "project_id": "SEASIC",
+            "investigator": "APF",
+            "animal_id": "123-4567",
+            "ear_tag": "123",
+            "surgeon": "JGL",
+            "surgery_date": "20260512",
+            "preop_cnn": "123456",
+            "postop_cnn": "654321",
+        },
+        existing_entry=entry,
+    )
+
+    assert not result.created
+    assert result.attachment_entry is entry
+    assert len(page.entries) == 2
+    assert entry.updated_content is not None
+    assert entry.updated_content.filename == "123-4567_surgery_20260512.json"
+    assert text_entry.updated_content is not None
+    assert "20260512" in text_entry.updated_content
     assert "old preview" not in text_entry.updated_content
 
 

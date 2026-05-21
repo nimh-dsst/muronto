@@ -82,6 +82,15 @@ class SurgeryWriteResult:
 
 
 @dataclass(frozen=True)
+class SurgeryRecord:
+    """A surgery JSON payload paired with its LabArchives attachment entry."""
+
+    page: Any
+    attachment_entry: Any
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class SurgeryFileAttachmentWriteResult:
     """Result of writing a surgery support-file attachment."""
 
@@ -515,9 +524,60 @@ def find_surgery_attachment(page: Any, filename: str) -> Any | None:
     return None
 
 
+def read_surgery_attachment(entry: Any) -> dict[str, Any] | None:
+    """Read a surgery JSON attachment when it is valid enough for UI."""
+    try:
+        decoded = _read_json_attachment(entry)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(decoded, Mapping):
+        return None
+
+    payload = {
+        key: value
+        for raw_key, value in decoded.items()
+        if (key := clean_string(raw_key))
+    }
+    if not payload.get(ANIMAL_ID_KEY) or not payload.get(SURGERY_DATE_KEY):
+        return None
+    return payload
+
+
+def discover_surgery_records(page: Any) -> list[SurgeryRecord]:
+    """Return surgery JSON records on a subject page."""
+    records: list[SurgeryRecord] = []
+    for entry in page.entries:
+        if not is_attachment_entry(entry):
+            continue
+        if not attachment_matches_caption(entry, SURGERY_ATTACHMENT_CAPTION):
+            continue
+
+        payload = read_surgery_attachment(entry)
+        if payload is None:
+            continue
+        records.append(
+            SurgeryRecord(
+                page=page,
+                attachment_entry=entry,
+                payload=payload,
+            )
+        )
+
+    return sorted(
+        records,
+        key=lambda record: (
+            clean_string(record.payload.get(SURGERY_DATE_KEY)),
+            clean_string(record.payload.get(ANIMAL_ID_KEY)).lower(),
+        ),
+    )
+
+
 def save_surgery_attachment(
     page: Any,
     surgery_payload: Mapping[str, Any],
+    *,
+    existing_entry: Any | None = None,
 ) -> SurgeryWriteResult:
     """Create or update a surgery JSON attachment on a subject page."""
     animal_id = clean_string(surgery_payload.get(ANIMAL_ID_KEY))
@@ -528,9 +588,9 @@ def save_surgery_attachment(
         raise ValueError("surgery_date is required.")
 
     filename = surgery_json_filename(animal_id, surgery_date)
-    existing_entry = find_surgery_attachment(page, filename)
-    if existing_entry is not None:
-        existing_entry.content = _json_attachment_content(
+    entry_to_update = existing_entry or find_surgery_attachment(page, filename)
+    if entry_to_update is not None:
+        entry_to_update.content = _json_attachment_content(
             surgery_payload,
             filename=filename,
             caption=SURGERY_ATTACHMENT_CAPTION,
@@ -538,12 +598,12 @@ def save_surgery_attachment(
         _sync_json_reference_text_entry(
             page,
             surgery_payload,
-            attachment_entry=existing_entry,
+            attachment_entry=entry_to_update,
             caption=SURGERY_ATTACHMENT_CAPTION,
         )
         return SurgeryWriteResult(
             page=page,
-            attachment_entry=existing_entry,
+            attachment_entry=entry_to_update,
             created=False,
         )
 

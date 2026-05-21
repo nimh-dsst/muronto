@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
-from datetime import date, time
+from collections.abc import Mapping, Sequence
+from datetime import date, datetime, time
 from typing import Any, TypedDict
 
 import streamlit as st
@@ -34,7 +34,9 @@ from muronto_app.config import (
 )
 from muronto_app.labarchives import (
     SubjectRecord,
+    SurgeryRecord,
     discover_subject_records,
+    discover_surgery_records,
     find_root_config_page,
     resolve_notebook_folder,
     save_config_attachment,
@@ -59,9 +61,12 @@ from muronto_app.subject import (
 )
 from muronto_app.surgery import (
     AP_KEY,
+    ATTACHMENTS_KEY,
+    BREGMA_LAMBDA_DIST_MM_KEY,
     CENTER_AP_KEY,
     CENTER_ML_KEY,
     CNN_PATTERN_TEXT,
+    CONC_MGML_KEY,
     COVERSLIP_DIAMETER_KEY,
     COVERSLIP_THICKNESS_KEY,
     COVERSLIP_TYPE_KEY,
@@ -78,7 +83,9 @@ from muronto_app.surgery import (
     ELECTRODE_TYPE_KEY,
     ELECTRODE_TYPE_OPTIONS,
     ELECTRODES_KEY,
+    END_TIME_KEY,
     FRONT_AP_KEY,
+    GENERAL_NOTES_KEY,
     GROUND_KEY,
     HEADPLATE_TYPE_KEY,
     HEMISPHERE_KEY,
@@ -88,7 +95,11 @@ from muronto_app.surgery import (
     IMPLANT_TYPE_OPTIONS,
     INFUSION_RATE_NLMIN_KEY,
     INFUSION_VOLUME_NL_KEY,
+    INFUSIONS_KEY,
+    INJECTIONS_KEY,
     LEFT_ML_KEY,
+    MEDICATION_KEY,
+    MEDICATIONS_KEY,
     ML_KEY,
     NOTE_UPLOAD_TYPE,
     NOTES_KEY,
@@ -96,23 +107,32 @@ from muronto_app.surgery import (
     PITCH_KEY,
     POST_INFUSION_FLOW_TEST_KEY,
     POST_INFUSION_FLOW_TEST_OPTIONS,
+    POSTOP_CNN_KEY,
+    PREOP_CNN_KEY,
     PROBE_ID_KEY,
     PROBE_MODEL_KEY,
     REFERENCE_KEY,
     REGION_KEY,
     ROLL_KEY,
     SITE_KEY,
+    START_TIME_KEY,
     STOCK_TITER_KEY,
     STOCK_TITER_PATTERN_TEXT,
+    SURGEON_KEY,
     SURGERY_CATEGORY_KEY,
     SURGERY_CATEGORY_OPTIONS,
     SURGERY_DATE_KEY,
+    SURGICAL_PROCEDURES_KEY,
     TAKEN_PHOTO_UPLOAD_TYPE,
     VIRAL_INJECTION_CATEGORY,
     VIRUS_ID_KEY,
     VIRUS_KEY,
     VIRUS_SOURCE_KEY,
     VIRUS_STOCK_KEY,
+    VIRUSES_KEY,
+    VOLUME_KEY,
+    WEIGHT_POST_G_KEY,
+    WEIGHT_PRE_G_KEY,
     WELL_TYPE_KEY,
     WELL_TYPE_OPTIONS,
     YAW_KEY,
@@ -132,6 +152,18 @@ SURGERY_PROCEDURE_COUNT_KEY = "surgery_procedure_count"
 SURGERY_TAKEN_PHOTO_COUNT_KEY = "surgery_taken_photo_count"
 SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY = "surgery_taken_photo_slot_ids"
 SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY = "surgery_taken_photo_next_slot_id"
+SURGERY_EDIT_MODE_KEY = "surgery_edit_existing"
+SURGERY_SELECTED_RECORD_KEY = "surgery_edit_record"
+SURGERY_CREATE_FORM_KEY = "surgery"
+
+ATTACHMENT_ACTION_PRESERVE = "Preserve existing"
+ATTACHMENT_ACTION_REPLACE = "Replace with new uploads"
+ATTACHMENT_ACTION_REMOVE = "Remove existing"
+ATTACHMENT_ACTION_OPTIONS = (
+    ATTACHMENT_ACTION_PRESERVE,
+    ATTACHMENT_ACTION_REPLACE,
+    ATTACHMENT_ACTION_REMOVE,
+)
 
 
 class PerioperativeValues(TypedDict):
@@ -160,6 +192,84 @@ def render_text_guidance(text: str) -> None:
     st.markdown(text)
 
 
+def surgery_key(form_key: str, suffix: str) -> str:
+    return f"{form_key}_{suffix}"
+
+
+def surgery_count_key(form_key: str, base_key: str) -> str:
+    if form_key == SURGERY_CREATE_FORM_KEY:
+        return base_key
+    return surgery_key(form_key, base_key)
+
+
+def selected_index(options: Sequence[str], value: object) -> int:
+    cleaned_value = clean_string(value)
+    if cleaned_value in options:
+        return options.index(cleaned_value)
+    return 0
+
+
+def string_default(payload: Mapping[str, Any], key: str) -> str:
+    return clean_string(payload.get(key))
+
+
+def number_default(value: object) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def mapping_default(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return dict(value)
+
+
+def mapping_list_default(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def parse_surgery_date(value: object) -> date | None:
+    cleaned_value = clean_string(value)
+    if not cleaned_value:
+        return None
+
+    try:
+        return datetime.strptime(cleaned_value, "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def parse_surgery_time(value: object) -> time | None:
+    cleaned_value = clean_string(value)
+    if not cleaned_value:
+        return None
+
+    try:
+        return datetime.strptime(cleaned_value, "%H%M").time()
+    except ValueError:
+        return None
+
+
+def surgery_record_widget_key(record: SurgeryRecord) -> str:
+    entry_id = clean_string(getattr(record.attachment_entry, "id", ""))
+    if entry_id:
+        return stable_key_part(entry_id)
+    surgery_date = clean_string(record.payload.get(SURGERY_DATE_KEY))
+    return stable_key_part(surgery_date or "selected")
+
+
+def surgery_record_label(record: SurgeryRecord) -> str:
+    payload = record.payload
+    surgery_date = clean_string(payload.get(SURGERY_DATE_KEY)) or "Unknown"
+    surgeon = clean_string(payload.get(SURGEON_KEY))
+    if surgeon:
+        return f"{surgery_date} - {surgeon}"
+    return surgery_date
+
+
 def stable_key_part(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
     return cleaned[:48] or "value"
@@ -186,12 +296,30 @@ def surgery_upload_filename(
     )
 
 
-def taken_photo_widget_key(slot_id: int) -> str:
-    return f"surgery_take_photo_{slot_id}"
+def taken_photo_widget_key(
+    form_key: str | int,
+    slot_id: int | None = None,
+) -> str:
+    if slot_id is None:
+        slot_id = int(form_key)
+        form_key = SURGERY_CREATE_FORM_KEY
+    return surgery_key(str(form_key), f"take_photo_{slot_id}")
 
 
-def current_taken_photo_slot_ids(session_state: Any) -> list[int]:
-    raw_slot_ids = session_state.get(SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY)
+def current_taken_photo_slot_ids(
+    session_state: Any,
+    form_key: str = SURGERY_CREATE_FORM_KEY,
+) -> list[int]:
+    slot_ids_key = surgery_count_key(
+        form_key,
+        SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY,
+    )
+    next_slot_id_key = surgery_count_key(
+        form_key,
+        SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY,
+    )
+    count_key = surgery_count_key(form_key, SURGERY_TAKEN_PHOTO_COUNT_KEY)
+    raw_slot_ids = session_state.get(slot_ids_key)
     if isinstance(raw_slot_ids, list):
         slot_ids: list[int] = []
         for raw_slot_id in raw_slot_ids:
@@ -206,7 +334,7 @@ def current_taken_photo_slot_ids(session_state: Any) -> list[int]:
 
     max_slot_id = max(slot_ids, default=0)
     raw_next_slot_id = session_state.get(
-        SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY,
+        next_slot_id_key,
     )
     next_slot_id = (
         raw_next_slot_id
@@ -214,16 +342,28 @@ def current_taken_photo_slot_ids(session_state: Any) -> list[int]:
         else max_slot_id + 1
     )
 
-    session_state[SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY] = slot_ids
-    session_state[SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY] = next_slot_id
-    session_state[SURGERY_TAKEN_PHOTO_COUNT_KEY] = len(slot_ids)
+    session_state[slot_ids_key] = slot_ids
+    session_state[next_slot_id_key] = next_slot_id
+    session_state[count_key] = len(slot_ids)
     return slot_ids
 
 
-def add_taken_photo_slot(session_state: Any) -> None:
-    slot_ids = current_taken_photo_slot_ids(session_state)
-    raw_next_slot_id = session_state.get(
+def add_taken_photo_slot(
+    session_state: Any,
+    form_key: str = SURGERY_CREATE_FORM_KEY,
+) -> None:
+    slot_ids = current_taken_photo_slot_ids(session_state, form_key)
+    slot_ids_key = surgery_count_key(
+        form_key,
+        SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY,
+    )
+    next_slot_id_key = surgery_count_key(
+        form_key,
         SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY,
+    )
+    count_key = surgery_count_key(form_key, SURGERY_TAKEN_PHOTO_COUNT_KEY)
+    raw_next_slot_id = session_state.get(
+        next_slot_id_key,
     )
     next_slot_id = (
         raw_next_slot_id
@@ -234,21 +374,30 @@ def add_taken_photo_slot(session_state: Any) -> None:
         next_slot_id = max(slot_ids, default=0) + 1
 
     updated_slot_ids = [*slot_ids, next_slot_id]
-    session_state[SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY] = updated_slot_ids
-    session_state[SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY] = next_slot_id + 1
-    session_state[SURGERY_TAKEN_PHOTO_COUNT_KEY] = len(updated_slot_ids)
+    session_state[slot_ids_key] = updated_slot_ids
+    session_state[next_slot_id_key] = next_slot_id + 1
+    session_state[count_key] = len(updated_slot_ids)
 
 
-def remove_taken_photo_slot(session_state: Any, slot_id: int) -> None:
-    slot_ids = current_taken_photo_slot_ids(session_state)
+def remove_taken_photo_slot(
+    session_state: Any,
+    slot_id: int,
+    *,
+    form_key: str = SURGERY_CREATE_FORM_KEY,
+) -> None:
+    slot_ids = current_taken_photo_slot_ids(session_state, form_key)
     updated_slot_ids = [
         current_slot_id
         for current_slot_id in slot_ids
         if current_slot_id != slot_id
     ]
-    session_state[SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY] = updated_slot_ids
-    session_state[SURGERY_TAKEN_PHOTO_COUNT_KEY] = len(updated_slot_ids)
-    session_state.pop(taken_photo_widget_key(slot_id), None)
+    session_state[
+        surgery_count_key(form_key, SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY)
+    ] = updated_slot_ids
+    session_state[
+        surgery_count_key(form_key, SURGERY_TAKEN_PHOTO_COUNT_KEY)
+    ] = len(updated_slot_ids)
+    session_state.pop(taken_photo_widget_key(form_key, slot_id), None)
 
 
 def scoped_choice_options(
@@ -269,16 +418,35 @@ def scoped_choice_options(
     return [*values, OTHER_CHOICE]
 
 
-def render_surgeon_select(options: dict[str, list[str]]) -> str:
+def render_surgeon_select(
+    options: dict[str, list[str]],
+    *,
+    form_key: str,
+    value: str = "",
+) -> str:
     choices = choice_options(options, SURGEON_OPTIONS_KEY)
-    selected = st.selectbox("Surgeon", options=choices, key="surgery_surgeon")
+    cleaned_value = clean_string(value)
+    index = (
+        choices.index(cleaned_value)
+        if cleaned_value in choices
+        else choices.index(OTHER_CHOICE)
+        if cleaned_value
+        else 0
+    )
+    selected = st.selectbox(
+        "Surgeon",
+        options=choices,
+        index=index,
+        key=surgery_key(form_key, "surgeon"),
+    )
     if selected != OTHER_CHOICE:
         return selected
 
     return clean_string(
         st.text_input(
             "New Surgeon",
-            key="surgery_surgeon_other",
+            key=surgery_key(form_key, "surgeon_other"),
+            value="" if cleaned_value in choices else cleaned_value,
         )
     )
 
@@ -286,12 +454,24 @@ def render_surgeon_select(options: dict[str, list[str]]) -> str:
 def render_medication_select(
     options: dict[str, list[str]],
     index: int,
+    *,
+    form_key: str,
+    value: str = "",
 ) -> str:
     choices = choice_options(options, MEDICATION_OPTIONS_KEY)
+    cleaned_value = clean_string(value)
+    selected_index = (
+        choices.index(cleaned_value)
+        if cleaned_value in choices
+        else choices.index(OTHER_CHOICE)
+        if cleaned_value
+        else 0
+    )
     selected = st.selectbox(
         f"Medication {index}",
         options=choices,
-        key=f"surgery_medication_{index}",
+        index=selected_index,
+        key=surgery_key(form_key, f"medication_{index}"),
     )
     if selected != OTHER_CHOICE:
         return selected
@@ -299,16 +479,21 @@ def render_medication_select(
     return clean_string(
         st.text_input(
             f"New Medication {index}",
-            key=f"surgery_medication_{index}_other",
+            key=surgery_key(form_key, f"medication_{index}_other"),
+            value="" if cleaned_value in choices else cleaned_value,
         )
     )
 
 
-def render_surgery_date() -> date | None:
+def render_surgery_date(
+    *,
+    form_key: str,
+    value: date | None = None,
+) -> date | None:
     selected_date = st.date_input(
         "Surgery Date",
-        value=None,
-        key="surgery_date",
+        value=value,
+        key=surgery_key(form_key, "date"),
         format="YYYY/MM/DD",
     )
     if isinstance(selected_date, date):
@@ -317,10 +502,15 @@ def render_surgery_date() -> date | None:
     return None
 
 
-def render_surgery_time(label: str, key: str) -> time | None:
+def render_surgery_time(
+    label: str,
+    key: str,
+    *,
+    value: time | None = None,
+) -> time | None:
     selected_time = st.time_input(
         label,
-        value=None,
+        value=value,
         key=key,
         step=60,
     )
@@ -445,13 +635,18 @@ def render_select_with_immediate_other(
     notebook: Any,
     config: dict[str, Any],
     choices: list[str] | None = None,
+    value: str = "",
 ) -> str:
     option_choices = choices or choice_options(options, options_key)
     default_key = f"{widget_key}_default"
-    default_value = clean_string(st.session_state.pop(default_key, ""))
+    default_value = clean_string(
+        st.session_state.pop(default_key, "")
+    ) or clean_string(value)
     index = (
         option_choices.index(default_value)
         if default_value in option_choices
+        else option_choices.index(OTHER_CHOICE)
+        if default_value
         else 0
     )
     selected = st.selectbox(
@@ -466,6 +661,7 @@ def render_select_with_immediate_other(
     new_value = st.text_input(
         other_prompt,
         key=f"{widget_key}_other",
+        value="" if default_value in option_choices else default_value,
     )
     if st.button(
         f"Add {label}",
@@ -489,14 +685,20 @@ def render_virus_multiselect(
     widget_key: str,
     notebook: Any,
     config: dict[str, Any],
+    values: Sequence[str] = (),
 ) -> list[str]:
     choices = choice_options(options, VIRUS_OPTIONS_KEY)
     default_key = f"{widget_key}_default"
     default_values = st.session_state.pop(default_key, None)
+    configured_values = (
+        default_values
+        if isinstance(default_values, list)
+        else [value for value in values if clean_string(value) in choices]
+    )
     selected = st.multiselect(
         "Viruses",
         options=choices,
-        default=default_values if isinstance(default_values, list) else None,
+        default=configured_values,
         key=widget_key,
     )
     selected_viruses = [
@@ -575,39 +777,48 @@ def render_selected_subject(record: SubjectRecord) -> None:
         st.write(f"genotype_{index}: {genotype}")
 
 
-def increment_medication_count() -> None:
-    st.session_state[SURGERY_MEDICATION_COUNT_KEY] = (
-        st.session_state.get(SURGERY_MEDICATION_COUNT_KEY, 1) + 1
-    )
+def increment_medication_count(form_key: str) -> None:
+    count_key = surgery_count_key(form_key, SURGERY_MEDICATION_COUNT_KEY)
+    st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
 
 
 def render_medications(
     options: dict[str, list[str]],
+    *,
+    form_key: str,
+    values: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, object]]:
-    st.session_state.setdefault(SURGERY_MEDICATION_COUNT_KEY, 1)
+    count_key = surgery_count_key(form_key, SURGERY_MEDICATION_COUNT_KEY)
+    st.session_state.setdefault(count_key, max(1, len(values)))
 
     medications: list[dict[str, object]] = []
-    for index in range(1, st.session_state[SURGERY_MEDICATION_COUNT_KEY] + 1):
-        medication = render_medication_select(options, index)
+    for index in range(1, st.session_state[count_key] + 1):
+        medication_defaults = values[index - 1] if index <= len(values) else {}
+        medication = render_medication_select(
+            options,
+            index,
+            form_key=form_key,
+            value=clean_string(medication_defaults.get(MEDICATION_KEY)),
+        )
         conc_mgml = st.number_input(
             "Concentration (mg/ml)",
             min_value=0.0,
-            value=None,
+            value=number_default(medication_defaults.get(CONC_MGML_KEY)),
             step=0.1,
-            key=f"surgery_medication_{index}_conc_mgml",
+            key=surgery_key(form_key, f"medication_{index}_conc_mgml"),
         )
         volume = st.number_input(
             "Volume (ml)",
             min_value=0.0,
-            value=None,
+            value=number_default(medication_defaults.get(VOLUME_KEY)),
             step=0.01,
-            key=f"surgery_medication_{index}_volume",
+            key=surgery_key(form_key, f"medication_{index}_volume"),
         )
         medications.append(
             {
-                "medication": medication,
-                "conc_mgml": conc_mgml,
-                "volume": volume,
+                MEDICATION_KEY: medication,
+                CONC_MGML_KEY: conc_mgml,
+                VOLUME_KEY: volume,
             }
         )
 
@@ -616,7 +827,11 @@ def render_medications(
 
 def render_perioperative_monitoring(
     options: dict[str, list[str]],
+    *,
+    form_key: str,
+    defaults: Mapping[str, Any] | None = None,
 ) -> PerioperativeValues:
+    defaults = defaults or {}
     with st.expander(
         "Perioperative Monitoring & Medications",
         expanded=True,
@@ -624,16 +839,16 @@ def render_perioperative_monitoring(
         weight_pre_g = st.number_input(
             "Weight Pre (grams)",
             min_value=0.0,
-            value=None,
+            value=number_default(defaults.get(WEIGHT_PRE_G_KEY)),
             step=0.1,
-            key="surgery_weight_pre_g",
+            key=surgery_key(form_key, "weight_pre_g"),
         )
         weight_post_g = st.number_input(
             "Weight Post (grams)",
             min_value=0.0,
-            value=None,
+            value=number_default(defaults.get(WEIGHT_POST_G_KEY)),
             step=0.1,
-            key="surgery_weight_post_g",
+            key=surgery_key(form_key, "weight_post_g"),
         )
 
         st.markdown("#### Medications")
@@ -641,19 +856,32 @@ def render_perioperative_monitoring(
             "Add medication",
             help="Add another medication entry.",
             use_container_width=True,
+            key=surgery_key(form_key, "add_medication"),
         ):
-            increment_medication_count()
+            increment_medication_count(form_key)
             st.rerun()
-        medications = render_medications(options)
+        medications = render_medications(
+            options,
+            form_key=form_key,
+            values=mapping_list_default(defaults.get(MEDICATIONS_KEY)),
+        )
 
-        start_time = render_surgery_time("Start Time", "surgery_start_time")
-        end_time = render_surgery_time("End Time", "surgery_end_time")
+        start_time = render_surgery_time(
+            "Start Time",
+            surgery_key(form_key, "start_time"),
+            value=parse_surgery_time(defaults.get(START_TIME_KEY)),
+        )
+        end_time = render_surgery_time(
+            "End Time",
+            surgery_key(form_key, "end_time"),
+            value=parse_surgery_time(defaults.get(END_TIME_KEY)),
+        )
         bregma_lambda_dist_mm = st.number_input(
             "Bregma Lambda Distance (mm)",
             min_value=0.0,
-            value=None,
+            value=number_default(defaults.get(BREGMA_LAMBDA_DIST_MM_KEY)),
             step=0.1,
-            key="surgery_bregma_lambda_dist_mm",
+            key=surgery_key(form_key, "bregma_lambda_dist_mm"),
         )
 
     return {
@@ -666,45 +894,62 @@ def render_perioperative_monitoring(
     }
 
 
-def increment_procedure_count() -> None:
-    st.session_state[SURGERY_PROCEDURE_COUNT_KEY] = (
-        st.session_state.get(SURGERY_PROCEDURE_COUNT_KEY, 1) + 1
-    )
-
-
-def procedure_injection_count_key(procedure_index: int) -> str:
-    return f"surgery_procedure_{procedure_index}_injection_count"
-
-
-def injection_infusion_count_key(
-    procedure_index: int,
-    injection_index: int,
-) -> str:
-    return (
-        f"surgery_procedure_{procedure_index}_"
-        f"injection_{injection_index}_infusion_count"
-    )
-
-
-def procedure_electrode_count_key(procedure_index: int) -> str:
-    return f"surgery_procedure_{procedure_index}_electrode_count"
-
-
-def increment_injection_count(procedure_index: int) -> None:
-    count_key = procedure_injection_count_key(procedure_index)
+def increment_procedure_count(form_key: str) -> None:
+    count_key = surgery_count_key(form_key, SURGERY_PROCEDURE_COUNT_KEY)
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
 
 
-def increment_electrode_count(procedure_index: int) -> None:
-    count_key = procedure_electrode_count_key(procedure_index)
+def procedure_injection_count_key(
+    form_key: str,
+    procedure_index: int,
+) -> str:
+    return surgery_key(
+        form_key,
+        f"procedure_{procedure_index}_injection_count",
+    )
+
+
+def injection_infusion_count_key(
+    form_key: str,
+    procedure_index: int,
+    injection_index: int,
+) -> str:
+    return surgery_key(
+        form_key,
+        (
+            f"procedure_{procedure_index}_"
+            f"injection_{injection_index}_infusion_count"
+        ),
+    )
+
+
+def procedure_electrode_count_key(
+    form_key: str,
+    procedure_index: int,
+) -> str:
+    return surgery_key(
+        form_key,
+        f"procedure_{procedure_index}_electrode_count",
+    )
+
+
+def increment_injection_count(form_key: str, procedure_index: int) -> None:
+    count_key = procedure_injection_count_key(form_key, procedure_index)
+    st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+
+
+def increment_electrode_count(form_key: str, procedure_index: int) -> None:
+    count_key = procedure_electrode_count_key(form_key, procedure_index)
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
 
 
 def increment_infusion_count(
+    form_key: str,
     procedure_index: int,
     injection_index: int,
 ) -> None:
     count_key = injection_infusion_count_key(
+        form_key,
         procedure_index,
         injection_index,
     )
@@ -713,16 +958,22 @@ def increment_infusion_count(
 
 def render_virus_attributes(
     *,
+    form_key: str,
     procedure_index: int,
     injection_index: int,
     virus: str,
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    defaults: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
-    virus_key = (
-        f"surgery_procedure_{procedure_index}_injection_{injection_index}_"
-        f"virus_{stable_key_part(virus)}"
+    defaults = defaults or {}
+    virus_key = surgery_key(
+        form_key,
+        (
+            f"procedure_{procedure_index}_injection_{injection_index}_"
+            f"virus_{stable_key_part(virus)}"
+        ),
     )
     st.markdown(f"##### {virus}")
     virus_source = render_select_with_immediate_other(
@@ -733,14 +984,17 @@ def render_virus_attributes(
         other_prompt="New Virus Source",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(VIRUS_SOURCE_KEY)),
     )
     virus_id = st.text_input(
         "Virus ID",
         key=f"{virus_key}_virus_id",
+        value=clean_string(defaults.get(VIRUS_ID_KEY)),
     )
     virus_stock = st.text_input(
         "Virus Stock",
         key=f"{virus_key}_virus_stock",
+        value=clean_string(defaults.get(VIRUS_STOCK_KEY)),
     )
     render_text_guidance(
         "Stock Titer must match the regex pattern "
@@ -749,15 +1003,17 @@ def render_virus_attributes(
     stock_titer = st.text_input(
         "Stock Titer",
         key=f"{virus_key}_stock_titer",
+        value=clean_string(defaults.get(STOCK_TITER_KEY)),
     )
     dilution = st.text_input(
         "Dilution",
         key=f"{virus_key}_dilution",
+        value=clean_string(defaults.get(DILUTION_KEY)),
     )
     infusion_rate_nlmin = st.number_input(
         "Infusion Rate (nl/min)",
         min_value=0.0,
-        value=None,
+        value=number_default(defaults.get(INFUSION_RATE_NLMIN_KEY)),
         step=1.0,
         key=f"{virus_key}_infusion_rate_nlmin",
     )
@@ -774,55 +1030,64 @@ def render_virus_attributes(
 
 def render_infusions(
     *,
+    form_key: str,
     procedure_index: int,
     injection_index: int,
+    values: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, object]]:
     count_key = injection_infusion_count_key(
+        form_key,
         procedure_index,
         injection_index,
     )
-    st.session_state.setdefault(count_key, 1)
+    st.session_state.setdefault(count_key, max(1, len(values)))
 
     if st.button(
         "Add infusion location",
         key=(
-            f"surgery_procedure_{procedure_index}_"
+            f"{form_key}_procedure_{procedure_index}_"
             f"injection_{injection_index}_add_infusion"
         ),
         use_container_width=True,
     ):
-        increment_infusion_count(procedure_index, injection_index)
+        increment_infusion_count(form_key, procedure_index, injection_index)
         st.rerun()
 
     infusions: list[dict[str, object]] = []
     for infusion_index in range(1, st.session_state[count_key] + 1):
-        prefix = (
-            f"surgery_procedure_{procedure_index}_"
-            f"injection_{injection_index}_infusion_{infusion_index}"
+        defaults = (
+            values[infusion_index - 1] if infusion_index <= len(values) else {}
+        )
+        prefix = surgery_key(
+            form_key,
+            (
+                f"procedure_{procedure_index}_"
+                f"injection_{injection_index}_infusion_{infusion_index}"
+            ),
         )
         st.markdown(f"##### Infusion Location {infusion_index}")
         ap = st.number_input(
             "AP",
-            value=None,
+            value=number_default(defaults.get(AP_KEY)),
             step=0.1,
             key=f"{prefix}_ap",
         )
         ml = st.number_input(
             "ML",
-            value=None,
+            value=number_default(defaults.get(ML_KEY)),
             step=0.1,
             key=f"{prefix}_ml",
         )
         dv = st.number_input(
             "DV",
-            value=None,
+            value=number_default(defaults.get(DV_KEY)),
             step=0.1,
             key=f"{prefix}_dv",
         )
         infusion_volume_nl = st.number_input(
             "Infusion Volume (nl)",
             min_value=0.0,
-            value=None,
+            value=number_default(defaults.get(INFUSION_VOLUME_NL_KEY)),
             step=10.0,
             key=f"{prefix}_infusion_volume_nl",
         )
@@ -830,10 +1095,15 @@ def render_infusions(
             "Post Infusion Flow Test",
             options=POST_INFUSION_FLOW_TEST_OPTIONS,
             key=f"{prefix}_post_infusion_flow_test",
+            index=selected_index(
+                POST_INFUSION_FLOW_TEST_OPTIONS,
+                defaults.get(POST_INFUSION_FLOW_TEST_KEY),
+            ),
         )
         notes = st.text_input(
             "Notes",
             key=f"{prefix}_notes",
+            value=clean_string(defaults.get(NOTES_KEY)),
         )
         infusions.append(
             {
@@ -850,13 +1120,19 @@ def render_infusions(
 
 def render_injection(
     *,
+    form_key: str,
     procedure_index: int,
     injection_index: int,
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    defaults: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
-    prefix = f"surgery_procedure_{procedure_index}_injection_{injection_index}"
+    defaults = defaults or {}
+    prefix = surgery_key(
+        form_key,
+        f"procedure_{procedure_index}_injection_{injection_index}",
+    )
     st.markdown(f"#### Injection {injection_index}")
     site = render_select_with_immediate_other(
         label="Site",
@@ -866,34 +1142,53 @@ def render_injection(
         other_prompt="New Site",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(SITE_KEY)),
     )
     hemisphere = st.selectbox(
         "hemisphere",
         options=HEMISPHERE_OPTIONS,
         key=f"{prefix}_hemisphere",
+        index=selected_index(HEMISPHERE_OPTIONS, defaults.get(HEMISPHERE_KEY)),
     )
+    virus_defaults = mapping_list_default(defaults.get(VIRUSES_KEY))
     selected_viruses = render_virus_multiselect(
         options=options,
         widget_key=f"{prefix}_viruses",
         notebook=notebook,
         config=config,
+        values=[
+            clean_string(virus_defaults_item.get(VIRUS_KEY))
+            for virus_defaults_item in virus_defaults
+        ],
     )
     viruses = [
         render_virus_attributes(
+            form_key=form_key,
             procedure_index=procedure_index,
             injection_index=injection_index,
             virus=virus,
             options=options,
             notebook=notebook,
             config=config,
+            defaults=next(
+                (
+                    virus_defaults_item
+                    for virus_defaults_item in virus_defaults
+                    if clean_string(virus_defaults_item.get(VIRUS_KEY))
+                    == virus
+                ),
+                {},
+            ),
         )
         for virus in selected_viruses
     ]
 
     st.markdown("##### Infusion Locations")
     infusions = render_infusions(
+        form_key=form_key,
         procedure_index=procedure_index,
         injection_index=injection_index,
+        values=mapping_list_default(defaults.get(INFUSIONS_KEY)),
     )
     return {
         SITE_KEY: site,
@@ -905,28 +1200,41 @@ def render_injection(
 
 def render_viral_injection_procedure(
     *,
+    form_key: str,
     procedure_index: int,
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    defaults: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
-    count_key = procedure_injection_count_key(procedure_index)
-    st.session_state.setdefault(count_key, 1)
+    defaults = defaults or {}
+    injection_defaults = mapping_list_default(defaults.get(INJECTIONS_KEY))
+    count_key = procedure_injection_count_key(form_key, procedure_index)
+    st.session_state.setdefault(count_key, max(1, len(injection_defaults)))
     if st.button(
         "Add injection",
-        key=f"surgery_procedure_{procedure_index}_add_injection",
+        key=surgery_key(
+            form_key,
+            f"procedure_{procedure_index}_add_injection",
+        ),
         use_container_width=True,
     ):
-        increment_injection_count(procedure_index)
+        increment_injection_count(form_key, procedure_index)
         st.rerun()
 
     injections = [
         render_injection(
+            form_key=form_key,
             procedure_index=procedure_index,
             injection_index=injection_index,
             options=options,
             notebook=notebook,
             config=config,
+            defaults=(
+                injection_defaults[injection_index - 1]
+                if injection_index <= len(injection_defaults)
+                else {}
+            ),
         )
         for injection_index in range(1, st.session_state[count_key] + 1)
     ]
@@ -938,13 +1246,24 @@ def render_viral_injection_procedure(
 
 def render_implant_type(
     *,
+    form_key: str,
     procedure_index: int,
+    value: str = "",
 ) -> str:
     choices = [*IMPLANT_TYPE_OPTIONS, OTHER_CHOICE]
+    cleaned_value = clean_string(value)
+    index = (
+        choices.index(cleaned_value)
+        if cleaned_value in choices
+        else choices.index(OTHER_CHOICE)
+        if cleaned_value
+        else 0
+    )
     selected = st.selectbox(
         "Implant Type",
         options=choices,
-        key=f"surgery_procedure_{procedure_index}_implant_type",
+        index=index,
+        key=surgery_key(form_key, f"procedure_{procedure_index}_implant_type"),
     )
     if selected != OTHER_CHOICE:
         return selected
@@ -952,19 +1271,29 @@ def render_implant_type(
     return clean_string(
         st.text_input(
             "New Implant Type",
-            key=f"surgery_procedure_{procedure_index}_implant_type_other",
+            key=surgery_key(
+                form_key,
+                f"procedure_{procedure_index}_implant_type_other",
+            ),
+            value="" if cleaned_value in choices else cleaned_value,
         )
     )
 
 
 def render_cranial_window_implant(
     *,
+    form_key: str,
     procedure_index: int,
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    defaults: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
-    prefix = f"surgery_procedure_{procedure_index}_cranial_window"
+    defaults = defaults or {}
+    prefix = surgery_key(
+        form_key,
+        f"procedure_{procedure_index}_cranial_window",
+    )
     headplate_type = render_select_with_immediate_other(
         label="Headplate Type",
         options=options,
@@ -979,6 +1308,7 @@ def render_cranial_window_implant(
             ("Standard_Y",),
             ("Standard_0",),
         ),
+        value=clean_string(defaults.get(HEADPLATE_TYPE_KEY)),
     )
     coverslip_type = render_select_with_immediate_other(
         label="Coverslip Type",
@@ -988,6 +1318,7 @@ def render_cranial_window_implant(
         other_prompt="New Coverslip Type",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(COVERSLIP_TYPE_KEY)),
     )
     coverslip_diameter = render_select_with_immediate_other(
         label="Coverslip Diameter",
@@ -997,6 +1328,7 @@ def render_cranial_window_implant(
         other_prompt="New Coverslip Diameter",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(COVERSLIP_DIAMETER_KEY)),
     )
     coverslip_thickness = render_select_with_immediate_other(
         label="Coverslip Thickness",
@@ -1006,6 +1338,7 @@ def render_cranial_window_implant(
         other_prompt="New Coverslip Thickness",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(COVERSLIP_THICKNESS_KEY)),
     )
     region = render_select_with_immediate_other(
         label="Region",
@@ -1015,16 +1348,17 @@ def render_cranial_window_implant(
         other_prompt="New Region",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(REGION_KEY)),
     )
     center_ap = st.number_input(
         "Center AP",
-        value=None,
+        value=number_default(defaults.get(CENTER_AP_KEY)),
         step=0.1,
         key=f"{prefix}_center_ap",
     )
     center_ml = st.number_input(
         "Center ML",
-        value=None,
+        value=number_default(defaults.get(CENTER_ML_KEY)),
         step=0.1,
         key=f"{prefix}_center_ml",
     )
@@ -1032,10 +1366,12 @@ def render_cranial_window_implant(
         "Well Type",
         options=WELL_TYPE_OPTIONS,
         key=f"{prefix}_well_type",
+        index=selected_index(WELL_TYPE_OPTIONS, defaults.get(WELL_TYPE_KEY)),
     )
     notes = st.text_input(
         "Notes",
         key=f"{prefix}_notes",
+        value=clean_string(defaults.get(NOTES_KEY)),
     )
 
     return {
@@ -1053,12 +1389,18 @@ def render_cranial_window_implant(
 
 def render_crystal_skull_implant(
     *,
+    form_key: str,
     procedure_index: int,
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    defaults: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
-    prefix = f"surgery_procedure_{procedure_index}_crystal_skull"
+    defaults = defaults or {}
+    prefix = surgery_key(
+        form_key,
+        f"procedure_{procedure_index}_crystal_skull",
+    )
     headplate_type = render_select_with_immediate_other(
         label="Headplate Type",
         options=options,
@@ -1073,6 +1415,7 @@ def render_crystal_skull_implant(
             ("Standard_0",),
             ("Standard_Y",),
         ),
+        value=clean_string(defaults.get(HEADPLATE_TYPE_KEY)),
     )
     cs_type = render_select_with_immediate_other(
         label="CS Type",
@@ -1082,16 +1425,17 @@ def render_crystal_skull_implant(
         other_prompt="New CS Type",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(CS_TYPE_KEY)),
     )
     front_ap = st.number_input(
         "Front AP",
-        value=None,
+        value=number_default(defaults.get(FRONT_AP_KEY)),
         step=0.1,
         key=f"{prefix}_front_ap",
     )
     left_ml = st.number_input(
         "Left ML",
-        value=None,
+        value=number_default(defaults.get(LEFT_ML_KEY)),
         step=0.1,
         key=f"{prefix}_left_ml",
     )
@@ -1103,6 +1447,7 @@ def render_crystal_skull_implant(
         other_prompt="New Well Type",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(WELL_TYPE_KEY)),
     )
 
     return {
@@ -1116,18 +1461,28 @@ def render_crystal_skull_implant(
 
 def render_electrode_object(
     *,
+    form_key: str,
     procedure_index: int,
     electrode_index: int,
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    defaults: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
-    prefix = f"surgery_procedure_{procedure_index}_electrode_{electrode_index}"
+    defaults = defaults or {}
+    prefix = surgery_key(
+        form_key,
+        f"procedure_{procedure_index}_electrode_{electrode_index}",
+    )
     st.markdown(f"#### Electrode {electrode_index}")
     electrode_type = st.selectbox(
         "Electrode Type",
         options=ELECTRODE_TYPE_OPTIONS,
         key=f"{prefix}_electrode_type",
+        index=selected_index(
+            ELECTRODE_TYPE_OPTIONS,
+            defaults.get(ELECTRODE_TYPE_KEY),
+        ),
     )
     probe_model = render_select_with_immediate_other(
         label="Probe Model",
@@ -1137,10 +1492,12 @@ def render_electrode_object(
         other_prompt="New Probe Model",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(PROBE_MODEL_KEY)),
     )
     probe_id = st.text_input(
         "Probe ID",
         key=f"{prefix}_probe_id",
+        value=clean_string(defaults.get(PROBE_ID_KEY)),
     )
     electrode_site = render_select_with_immediate_other(
         label="Electrode Site",
@@ -1150,53 +1507,64 @@ def render_electrode_object(
         other_prompt="New Electrode Site",
         notebook=notebook,
         config=config,
+        value=clean_string(defaults.get(ELECTRODE_SITE_KEY)),
     )
     electrode_hemisphere = st.selectbox(
         "Electrode Hemisphere",
         options=HEMISPHERE_OPTIONS,
         key=f"{prefix}_electrode_hemisphere",
+        index=selected_index(
+            HEMISPHERE_OPTIONS,
+            defaults.get(ELECTRODE_HEMISPHERE_KEY),
+        ),
     )
     pitch = st.text_input(
         "Pitch",
         key=f"{prefix}_pitch",
+        value=clean_string(defaults.get(PITCH_KEY)),
     )
     yaw = st.text_input(
         "Yaw",
         key=f"{prefix}_yaw",
+        value=clean_string(defaults.get(YAW_KEY)),
     )
     roll = st.text_input(
         "Roll",
         key=f"{prefix}_roll",
+        value=clean_string(defaults.get(ROLL_KEY)),
     )
     ap = st.number_input(
         "AP",
-        value=None,
+        value=number_default(defaults.get(AP_KEY)),
         step=0.1,
         key=f"{prefix}_ap",
     )
     ml = st.number_input(
         "ML",
-        value=None,
+        value=number_default(defaults.get(ML_KEY)),
         step=0.1,
         key=f"{prefix}_ml",
     )
     dv = st.number_input(
         "DV",
-        value=None,
+        value=number_default(defaults.get(DV_KEY)),
         step=0.1,
         key=f"{prefix}_dv",
     )
     ground = st.text_input(
         "Ground",
         key=f"{prefix}_ground",
+        value=clean_string(defaults.get(GROUND_KEY)),
     )
     reference = st.text_input(
         "Reference",
         key=f"{prefix}_reference",
+        value=clean_string(defaults.get(REFERENCE_KEY)),
     )
     notes = st.text_input(
         "Notes",
         key=f"{prefix}_notes",
+        value=clean_string(defaults.get(NOTES_KEY)),
     )
 
     return {
@@ -1219,28 +1587,39 @@ def render_electrode_object(
 
 def render_electrode_implant(
     *,
+    form_key: str,
     procedure_index: int,
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    values: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, object]]:
-    count_key = procedure_electrode_count_key(procedure_index)
-    st.session_state.setdefault(count_key, 1)
+    count_key = procedure_electrode_count_key(form_key, procedure_index)
+    st.session_state.setdefault(count_key, max(1, len(values)))
     if st.button(
         "Add electrode",
-        key=f"surgery_procedure_{procedure_index}_add_electrode",
+        key=surgery_key(
+            form_key,
+            f"procedure_{procedure_index}_add_electrode",
+        ),
         use_container_width=True,
     ):
-        increment_electrode_count(procedure_index)
+        increment_electrode_count(form_key, procedure_index)
         st.rerun()
 
     return [
         render_electrode_object(
+            form_key=form_key,
             procedure_index=procedure_index,
             electrode_index=electrode_index,
             options=options,
             notebook=notebook,
             config=config,
+            defaults=(
+                values[electrode_index - 1]
+                if electrode_index <= len(values)
+                else {}
+            ),
         )
         for electrode_index in range(1, st.session_state[count_key] + 1)
     ]
@@ -1248,40 +1627,53 @@ def render_electrode_implant(
 
 def render_implant_procedure(
     *,
+    form_key: str,
     procedure_index: int,
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    defaults: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
-    implant_type = render_implant_type(procedure_index=procedure_index)
+    defaults = defaults or {}
+    implant_type = render_implant_type(
+        form_key=form_key,
+        procedure_index=procedure_index,
+        value=clean_string(defaults.get(IMPLANT_TYPE_KEY)),
+    )
     procedure: dict[str, object] = {
         SURGERY_CATEGORY_KEY: IMPLANT_CATEGORY,
         IMPLANT_TYPE_KEY: implant_type,
     }
     if implant_type == CRANIAL_WINDOW_IMPLANT_TYPE:
         procedure[CRANIAL_WINDOW_KEY] = render_cranial_window_implant(
+            form_key=form_key,
             procedure_index=procedure_index,
             options=options,
             notebook=notebook,
             config=config,
+            defaults=mapping_default(defaults.get(CRANIAL_WINDOW_KEY)),
         )
         return procedure
 
     if implant_type == CRYSTAL_SKULL_IMPLANT_TYPE:
         procedure[CRYSTAL_SKULL_KEY] = render_crystal_skull_implant(
+            form_key=form_key,
             procedure_index=procedure_index,
             options=options,
             notebook=notebook,
             config=config,
+            defaults=mapping_default(defaults.get(CRYSTAL_SKULL_KEY)),
         )
         return procedure
 
     if implant_type == ELECTRODE_IMPLANT_TYPE:
         procedure[ELECTRODES_KEY] = render_electrode_implant(
+            form_key=form_key,
             procedure_index=procedure_index,
             options=options,
             notebook=notebook,
             config=config,
+            values=mapping_list_default(defaults.get(ELECTRODES_KEY)),
         )
         return procedure
 
@@ -1297,25 +1689,31 @@ def render_surgical_procedures(
     options: dict[str, list[str]],
     notebook: Any,
     config: dict[str, Any],
+    form_key: str,
+    values: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, object]]:
     st.subheader("Surgical Procedures")
-    st.session_state.setdefault(SURGERY_PROCEDURE_COUNT_KEY, 1)
+    count_key = surgery_count_key(form_key, SURGERY_PROCEDURE_COUNT_KEY)
+    st.session_state.setdefault(count_key, max(1, len(values)))
     if st.button(
         "Add surgical procedure",
-        key="surgery_add_procedure",
+        key=surgery_key(form_key, "add_procedure"),
         use_container_width=True,
     ):
-        increment_procedure_count()
+        increment_procedure_count(form_key)
         st.rerun()
 
     procedures: list[dict[str, object]] = []
     for procedure_index in range(
         1,
-        st.session_state[SURGERY_PROCEDURE_COUNT_KEY] + 1,
+        st.session_state[count_key] + 1,
     ):
-        is_latest_procedure = (
-            procedure_index == st.session_state[SURGERY_PROCEDURE_COUNT_KEY]
+        procedure_defaults = (
+            values[procedure_index - 1]
+            if procedure_index <= len(values)
+            else {}
         )
+        is_latest_procedure = procedure_index == st.session_state[count_key]
         with st.expander(
             f"Procedure {procedure_index}",
             expanded=is_latest_procedure,
@@ -1323,69 +1721,90 @@ def render_surgical_procedures(
             category = st.selectbox(
                 "Subject Category",
                 options=SURGERY_CATEGORY_OPTIONS,
-                key=f"surgery_procedure_{procedure_index}_category",
+                key=surgery_key(
+                    form_key,
+                    f"procedure_{procedure_index}_category",
+                ),
+                index=selected_index(
+                    SURGERY_CATEGORY_OPTIONS,
+                    procedure_defaults.get(SURGERY_CATEGORY_KEY),
+                ),
             )
             if category == IMPLANT_CATEGORY:
                 procedures.append(
                     render_implant_procedure(
+                        form_key=form_key,
                         procedure_index=procedure_index,
                         options=options,
                         notebook=notebook,
                         config=config,
+                        defaults=procedure_defaults,
                     )
                 )
                 continue
 
             procedures.append(
                 render_viral_injection_procedure(
+                    form_key=form_key,
                     procedure_index=procedure_index,
                     options=options,
                     notebook=notebook,
                     config=config,
+                    defaults=procedure_defaults,
                 )
             )
     return procedures
 
 
-def render_general_notes_attachments() -> GeneralNotesAttachmentValues:
+def render_general_notes_attachments(
+    *,
+    form_key: str,
+    defaults: Mapping[str, Any] | None = None,
+) -> GeneralNotesAttachmentValues:
+    defaults = defaults or {}
     with st.expander("General Notes & Attachments", expanded=True):
         general_notes = st.text_area(
             "General Notes",
-            key="surgery_general_notes",
+            key=surgery_key(form_key, "general_notes"),
+            value=clean_string(defaults.get(GENERAL_NOTES_KEY)),
         )
         note_uploads = st.file_uploader(
             "Note Upload",
             accept_multiple_files=True,
-            key="surgery_note_upload",
+            key=surgery_key(form_key, "note_upload"),
         )
         photo_uploads = st.file_uploader(
             "Photo Upload",
             type=["png", "jpg", "jpeg", "tif", "tiff"],
             accept_multiple_files=True,
-            key="surgery_photo_upload",
+            key=surgery_key(form_key, "photo_upload"),
         )
-        slot_ids = current_taken_photo_slot_ids(st.session_state)
+        slot_ids = current_taken_photo_slot_ids(st.session_state, form_key)
         taken_photos: list[Any] = []
         for photo_index, slot_id in enumerate(slot_ids, start=1):
             if st.button(
                 f"Remove Photo {photo_index}",
-                key=f"surgery_remove_taken_photo_{slot_id}",
+                key=surgery_key(form_key, f"remove_taken_photo_{slot_id}"),
             ):
-                remove_taken_photo_slot(st.session_state, slot_id)
+                remove_taken_photo_slot(
+                    st.session_state,
+                    form_key=form_key,
+                    slot_id=slot_id,
+                )
                 st.rerun()
 
             taken_photo = st.camera_input(
                 f"Take Photo {photo_index}",
-                key=taken_photo_widget_key(slot_id),
+                key=taken_photo_widget_key(form_key, slot_id),
             )
             if taken_photo is not None:
                 taken_photos.append(taken_photo)
 
         if st.button(
             "Add photo",
-            key="surgery_add_taken_photo",
+            key=surgery_key(form_key, "add_taken_photo"),
         ):
-            add_taken_photo_slot(st.session_state)
+            add_taken_photo_slot(st.session_state, form_key)
             st.rerun()
 
     return {
@@ -1504,6 +1923,95 @@ def save_general_surgery_attachments(
     return references
 
 
+def existing_attachment_references(
+    payload: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    references: list[dict[str, str]] = []
+    for raw_reference in mapping_list_default(payload.get(ATTACHMENTS_KEY)):
+        references.append(
+            {
+                key: clean_string(raw_reference.get(key))
+                for key in (
+                    "upload_type",
+                    "entry_id",
+                    "filename",
+                    "caption",
+                    "mime_type",
+                )
+            }
+        )
+    return references
+
+
+def has_new_attachment_uploads(
+    attachment_values: GeneralNotesAttachmentValues,
+) -> bool:
+    return bool(
+        attachment_values["note_uploads"]
+        or attachment_values["photo_uploads"]
+        or attachment_values["taken_photos"]
+    )
+
+
+def merge_attachment_references(
+    existing_references: list[dict[str, str]],
+    new_references: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    merged_by_filename: dict[str, dict[str, str]] = {}
+    for reference in [*existing_references, *new_references]:
+        filename = clean_string(reference.get("filename"))
+        if filename:
+            merged_by_filename[filename] = reference
+
+    return list(merged_by_filename.values())
+
+
+def render_attachment_reference_action(
+    *,
+    form_key: str,
+    existing_references: list[dict[str, str]],
+) -> str:
+    if not existing_references:
+        return ATTACHMENT_ACTION_REPLACE
+
+    return st.radio(
+        "Existing attachment references",
+        options=ATTACHMENT_ACTION_OPTIONS,
+        key=surgery_key(form_key, "attachment_reference_action"),
+    )
+
+
+def resolve_attachment_references(
+    *,
+    action: str,
+    existing_references: list[dict[str, str]],
+    new_references: list[dict[str, str]],
+    has_new_uploads: bool,
+) -> list[dict[str, str]] | None:
+    if not existing_references:
+        return new_references
+
+    if action == ATTACHMENT_ACTION_PRESERVE:
+        return merge_attachment_references(existing_references, new_references)
+
+    if action == ATTACHMENT_ACTION_REPLACE:
+        if not has_new_uploads:
+            st.error(
+                "Upload at least one new note or photo before replacing "
+                "existing attachment references."
+            )
+            return None
+        return new_references
+
+    if has_new_uploads:
+        st.error(
+            "Remove existing attachment references cannot be combined with "
+            "new uploads. Choose Replace with new uploads instead."
+        )
+        return None
+    return []
+
+
 def save_reusable_surgery_options(
     *,
     notebook: Any,
@@ -1582,6 +2090,14 @@ def load_subject_records(
     return None
 
 
+def load_surgery_records(page: Any) -> list[SurgeryRecord] | None:
+    try:
+        return discover_surgery_records(page)
+    except ApiError as exc:
+        st.error(f"Unable to load surgery records from LabArchives: {exc}")
+    return None
+
+
 def render_surgery_form(
     *,
     notebook: Any,
@@ -1589,38 +2105,75 @@ def render_surgery_form(
     project: dict[str, str],
     investigator: str,
     selected_subject: SubjectRecord,
+    existing_record: SurgeryRecord | None = None,
 ) -> None:
     subject_payload = selected_subject.payload
+    payload_defaults = existing_record.payload if existing_record else {}
+    form_key = SURGERY_CREATE_FORM_KEY
+    if existing_record is not None:
+        form_key = f"surgery_edit_{surgery_record_widget_key(existing_record)}"
+    existing_references = existing_attachment_references(payload_defaults)
     options = normalize_options(config.get(OPTIONS_KEY))
 
     with st.expander("Surgery Details", expanded=True):
-        surgeon = render_surgeon_select(options)
-        surgery_date = render_surgery_date()
+        surgeon = render_surgeon_select(
+            options,
+            form_key=form_key,
+            value=string_default(payload_defaults, SURGEON_KEY),
+        )
+        surgery_date = render_surgery_date(
+            form_key=form_key,
+            value=parse_surgery_date(payload_defaults.get(SURGERY_DATE_KEY)),
+        )
 
         render_text_guidance(
             "PreOp CNN must match the regex pattern "
             f"`{CNN_PATTERN_TEXT}`, for example `123456`."
         )
-        preop_cnn = st.text_input("PreOp CNN", key="surgery_preop_cnn")
+        preop_cnn = st.text_input(
+            "PreOp CNN",
+            key=surgery_key(form_key, "preop_cnn"),
+            value=string_default(payload_defaults, PREOP_CNN_KEY),
+        )
 
         render_text_guidance(
             "PostOp CNN must match the regex pattern "
             f"`{CNN_PATTERN_TEXT}`, for example `123456`."
         )
-        postop_cnn = st.text_input("PostOp CNN", key="surgery_postop_cnn")
+        postop_cnn = st.text_input(
+            "PostOp CNN",
+            key=surgery_key(form_key, "postop_cnn"),
+            value=string_default(payload_defaults, POSTOP_CNN_KEY),
+        )
 
-    perioperative_values = render_perioperative_monitoring(options)
+    perioperative_values = render_perioperative_monitoring(
+        options,
+        form_key=form_key,
+        defaults=payload_defaults,
+    )
     surgical_procedures = render_surgical_procedures(
         options=options,
         notebook=notebook,
         config=config,
+        form_key=form_key,
+        values=mapping_list_default(
+            payload_defaults.get(SURGICAL_PROCEDURES_KEY)
+        ),
     )
-    general_attachment_values = render_general_notes_attachments()
+    general_attachment_values = render_general_notes_attachments(
+        form_key=form_key,
+        defaults=payload_defaults,
+    )
+    attachment_action = render_attachment_reference_action(
+        form_key=form_key,
+        existing_references=existing_references,
+    )
 
     submitted = st.button(
         "Save surgery record",
         type="primary",
         use_container_width=True,
+        key=surgery_key(form_key, "submit"),
     )
     if not submitted:
         return
@@ -1659,12 +2212,43 @@ def render_surgery_form(
         return
 
     try:
+        has_uploads = has_new_attachment_uploads(general_attachment_values)
+        if (
+            existing_references
+            and attachment_action == ATTACHMENT_ACTION_REPLACE
+        ):
+            if not has_uploads:
+                st.error(
+                    "Upload at least one new note or photo before replacing "
+                    "existing attachment references."
+                )
+                return
+        if (
+            existing_references
+            and attachment_action == ATTACHMENT_ACTION_REMOVE
+        ):
+            if has_uploads:
+                st.error(
+                    "Remove existing attachment references cannot be combined "
+                    "with new uploads. Choose Replace with new uploads "
+                    "instead."
+                )
+                return
+
         attachment_references = save_general_surgery_attachments(
             page=selected_subject.page,
             payload=payload,
             attachment_values=general_attachment_values,
         )
-        payload = build_payload(attachment_references)
+        resolved_attachment_references = resolve_attachment_references(
+            action=attachment_action,
+            existing_references=existing_references,
+            new_references=attachment_references,
+            has_new_uploads=has_uploads,
+        )
+        if resolved_attachment_references is None:
+            return
+        payload = build_payload(resolved_attachment_references)
     except SurgeryValidationError as exc:
         st.error("Complete the surgery form before saving the record.")
         for error in exc.errors:
@@ -1675,7 +2259,13 @@ def render_surgery_form(
         return
 
     try:
-        result = save_surgery_attachment(selected_subject.page, payload)
+        result = save_surgery_attachment(
+            selected_subject.page,
+            payload,
+            existing_entry=(
+                existing_record.attachment_entry if existing_record else None
+            ),
+        )
     except ApiError as exc:
         st.error(f"Unable to save the surgery record: {exc}")
         return
@@ -1745,6 +2335,10 @@ def main() -> None:
     st.subheader("Surgery")
     st.write(f"Project ID: {project[PROJECT_ID_KEY]}")
     st.write(f"Investigator: {investigator}")
+    edit_existing = st.toggle(
+        "Edit existing surgery record",
+        key=SURGERY_EDIT_MODE_KEY,
+    )
 
     with st.expander("Subject Information", expanded=True):
         subject_records = load_subject_records(notebook, project)
@@ -1765,12 +2359,34 @@ def main() -> None:
         selected_subject = subject_records[selected_subject_index]
         render_selected_subject(selected_subject)
 
+    selected_surgery_record: SurgeryRecord | None = None
+    if edit_existing:
+        surgery_records = load_surgery_records(selected_subject.page)
+        if surgery_records is None:
+            return
+        if not surgery_records:
+            st.info(
+                "No surgery JSON records were found on the selected subject."
+            )
+            return
+
+        selected_surgery_index = st.selectbox(
+            "Surgery Record",
+            options=list(range(len(surgery_records))),
+            format_func=lambda index: surgery_record_label(
+                surgery_records[index]
+            ),
+            key=SURGERY_SELECTED_RECORD_KEY,
+        )
+        selected_surgery_record = surgery_records[selected_surgery_index]
+
     render_surgery_form(
         notebook=notebook,
         config=config,
         project=project,
         investigator=investigator,
         selected_subject=selected_subject,
+        existing_record=selected_surgery_record,
     )
 
 
