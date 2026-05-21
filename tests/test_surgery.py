@@ -549,10 +549,12 @@ def test_build_surgery_payload_validates_cnn_patterns() -> None:
         build_surgery_payload(**kwargs)
 
     assert any(
-        "preop_cnn must match" in error for error in exc_info.value.errors
+        "PreOp Card Cage Number must match" in error
+        for error in exc_info.value.errors
     )
     assert any(
-        "postop_cnn must match" in error for error in exc_info.value.errors
+        "PostOp Card Cage Number must match" in error
+        for error in exc_info.value.errors
     )
 
 
@@ -587,7 +589,10 @@ def test_build_surgery_payload_can_mark_incomplete_draft() -> None:
         "surgery_date must be selected."
         in payload[SURGERY_VALIDATION_ERRORS_KEY]
     )
-    assert "preop_cnn is required." in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    assert (
+        "PreOp Card Cage Number is required."
+        in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    )
     assert surgery_record_file_token(payload) == "incomplete_draft123"
 
 

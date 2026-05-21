@@ -30,7 +30,12 @@ from muronto_app.config import (
     clean_string,
     normalize_options,
 )
-from muronto_app.subject import ANIMAL_ID_KEY, ANIMAL_ID_LABEL, EAR_TAG_KEY
+from muronto_app.subject import (
+    ANIMAL_ID_KEY,
+    ANIMAL_ID_LABEL,
+    EAR_TAG_KEY,
+    EAR_TAG_LABEL,
+)
 
 SURGERY_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery"
 SURGERY_FILE_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery_attachment"
@@ -50,7 +55,9 @@ FILENAME_KEY: Final[str] = "filename"
 CAPTION_KEY: Final[str] = "caption"
 MIME_TYPE_KEY: Final[str] = "mime_type"
 PREOP_CNN_KEY: Final[str] = "preop_cnn"
+PREOP_CNN_LABEL: Final[str] = "PreOp Card Cage Number"
 POSTOP_CNN_KEY: Final[str] = "postop_cnn"
+POSTOP_CNN_LABEL: Final[str] = "PostOp Card Cage Number"
 WEIGHT_PRE_G_KEY: Final[str] = "weight_pre_g"
 WEIGHT_POST_G_KEY: Final[str] = "weight_post_g"
 MEDICATIONS_KEY: Final[str] = "medications"
@@ -1012,7 +1019,7 @@ def build_surgery_payload(
         (PROJECT_ID_KEY, cleaned_project_id),
         (INVESTIGATOR_KEY, cleaned_investigator),
         (ANIMAL_ID_LABEL, cleaned_animal_id),
-        (EAR_TAG_KEY, cleaned_ear_tag),
+        (EAR_TAG_LABEL, cleaned_ear_tag),
         (SURGEON_KEY, cleaned_surgeon),
     ):
         _validate_required(
@@ -1027,12 +1034,12 @@ def build_surgery_payload(
         errors=errors,
     )
     _validate_cnn(
-        field_name=PREOP_CNN_KEY,
+        field_name=PREOP_CNN_LABEL,
         value=cleaned_preop_cnn,
         errors=errors,
     )
     _validate_cnn(
-        field_name=POSTOP_CNN_KEY,
+        field_name=POSTOP_CNN_LABEL,
         value=cleaned_postop_cnn,
         errors=errors,
     )

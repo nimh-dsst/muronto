@@ -118,5 +118,5 @@ def test_render_parent_ccn_shows_for_breeding_source_type(
 
     assert subject_page.render_parent_ccn("Breeding") == "654321"
     assert len(markdown_calls) == 1
-    assert "parent_ccn must match" in markdown_calls[0]
-    assert text_input_calls == ["parent_ccn"]
+    assert "Parent Cage Card Number must match" in markdown_calls[0]
+    assert text_input_calls == ["Parent Cage Card Number"]

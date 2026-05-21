@@ -70,14 +70,17 @@ def test_build_subject_payload_can_mark_incomplete_subject() -> None:
     assert payload["dow"] == ""
     assert payload["source_type"] == ""
     assert payload[SUBJECT_STATUS_KEY] == SUBJECT_STATUS_INCOMPLETE
-    assert "ear_tag is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
-    assert "ccn is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
-    assert "sex is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
-    assert "strain_1 is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
-    assert "genotype_1 is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
-    assert "dob must be selected." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
-    assert "dow must be selected." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
-    assert "source_type is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "Ear Tag is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert (
+        "Card Cage Number is required."
+        in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    )
+    assert "Sex is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "Strain 1 is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "Genotype 1 is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "DOB must be selected." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "DOW must be selected." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "Source Type is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
 
 
 def test_build_subject_payload_requires_valid_animal_id_when_incomplete() -> (
@@ -116,7 +119,7 @@ def test_build_subject_payload_requires_breeding_parent_ccn() -> None:
             parent_ccn="",
         )
 
-    assert "parent_ccn is required." in exc_info.value.errors
+    assert "Parent Cage Card Number is required." in exc_info.value.errors
 
 
 def test_build_subject_payload_allows_blank_parent_for_jax() -> None:
@@ -151,7 +154,8 @@ def test_build_subject_payload_validates_optional_parent_ccn() -> None:
         )
 
     assert any(
-        "parent_ccn must match" in error for error in exc_info.value.errors
+        "Parent Cage Card Number must match" in error
+        for error in exc_info.value.errors
     )
 
 
@@ -173,9 +177,12 @@ def test_build_subject_payload_validates_identity_patterns() -> None:
         "Animal ID must match" in error for error in exc_info.value.errors
     )
     assert any(
-        "ear_tag must match" in error for error in exc_info.value.errors
+        "Ear Tag must match" in error for error in exc_info.value.errors
     )
-    assert any("ccn must match" in error for error in exc_info.value.errors)
+    assert any(
+        "Card Cage Number must match" in error
+        for error in exc_info.value.errors
+    )
 
 
 def test_build_subject_payload_validates_sex_options() -> None:
@@ -192,7 +199,7 @@ def test_build_subject_payload_validates_sex_options() -> None:
             parent_ccn="",
         )
 
-    assert "sex must be one of M, F." in exc_info.value.errors
+    assert "Sex must be one of M, F." in exc_info.value.errors
 
 
 def test_with_subject_options_persists_custom_subject_values() -> None:

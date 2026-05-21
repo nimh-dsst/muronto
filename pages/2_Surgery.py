@@ -57,7 +57,9 @@ from muronto_app.subject import (
     DOB_KEY,
     EAR_TAG_KEY,
     GENOTYPE_KEY,
+    GENOTYPE_LABEL,
     SEX_KEY,
+    STRAIN_LABEL,
     STRAIN_OPTIONS_KEY,
     is_subject_incomplete,
 )
@@ -111,7 +113,9 @@ from muronto_app.surgery import (
     POST_INFUSION_FLOW_TEST_KEY,
     POST_INFUSION_FLOW_TEST_OPTIONS,
     POSTOP_CNN_KEY,
+    POSTOP_CNN_LABEL,
     PREOP_CNN_KEY,
+    PREOP_CNN_LABEL,
     PROBE_ID_KEY,
     PROBE_MODEL_KEY,
     REFERENCE_KEY,
@@ -851,12 +855,12 @@ def render_selected_subject(record: SubjectRecord) -> None:
 
     pairs = subject_strain_genotypes(payload)
     if not pairs:
-        st.write("Strain/genotype: Not recorded")
+        st.write("Strain/Genotype: Not recorded")
         return
 
     for index, (strain, genotype) in enumerate(pairs, start=1):
-        st.write(f"strain_{index}: {strain}")
-        st.write(f"genotype_{index}: {genotype}")
+        st.write(f"{STRAIN_LABEL} {index}: {strain}")
+        st.write(f"{GENOTYPE_LABEL} {index}: {genotype}")
 
 
 def increment_medication_count(form_key: str) -> None:
@@ -934,12 +938,12 @@ def render_perioperative_monitoring(
         )
 
         start_time = render_surgery_time(
-            "Start Time",
+            "Start Time (HHMM)",
             surgery_key(form_key, "start_time"),
             value=parse_surgery_time(defaults.get(START_TIME_KEY)),
         )
         end_time = render_surgery_time(
-            "End Time",
+            "End Time (HHMM)",
             surgery_key(form_key, "end_time"),
             value=parse_surgery_time(defaults.get(END_TIME_KEY)),
         )
@@ -2222,11 +2226,11 @@ def render_surgery_form(
         )
 
         render_text_guidance(
-            "PreOp CNN must match the regex pattern "
+            f"{PREOP_CNN_LABEL} must match the regex pattern "
             f"`{CNN_PATTERN_TEXT}`, for example `123456`."
         )
         preop_cnn = render_pattern_text_input(
-            label="PreOp CNN",
+            label=PREOP_CNN_LABEL,
             key=surgery_key(form_key, "preop_cnn"),
             value=string_default(payload_defaults, PREOP_CNN_KEY),
             pattern=CNN_PATTERN,
@@ -2235,11 +2239,11 @@ def render_surgery_form(
         )
 
         render_text_guidance(
-            "PostOp CNN must match the regex pattern "
+            f"{POSTOP_CNN_LABEL} must match the regex pattern "
             f"`{CNN_PATTERN_TEXT}`, for example `123456`."
         )
         postop_cnn = render_pattern_text_input(
-            label="PostOp CNN",
+            label=POSTOP_CNN_LABEL,
             key=surgery_key(form_key, "postop_cnn"),
             value=string_default(payload_defaults, POSTOP_CNN_KEY),
             pattern=CNN_PATTERN,

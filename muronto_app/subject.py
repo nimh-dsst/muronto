@@ -20,13 +20,22 @@ from muronto_app.config import (
 ANIMAL_ID_KEY: Final[str] = "animal_id"
 ANIMAL_ID_LABEL: Final[str] = "Animal ID"
 EAR_TAG_KEY: Final[str] = "ear_tag"
+EAR_TAG_LABEL: Final[str] = "Ear Tag"
 CCN_KEY: Final[str] = "ccn"
+CCN_LABEL: Final[str] = "Card Cage Number"
 SEX_KEY: Final[str] = "sex"
+SEX_LABEL: Final[str] = "Sex"
 GENOTYPE_KEY: Final[str] = "genotype"
+GENOTYPE_LABEL: Final[str] = "Genotype"
+STRAIN_LABEL: Final[str] = "Strain"
 DOB_KEY: Final[str] = "dob"
+DOB_LABEL: Final[str] = "DOB"
 DOW_KEY: Final[str] = "dow"
+DOW_LABEL: Final[str] = "DOW"
 SOURCE_TYPE_KEY: Final[str] = SOURCE_TYPE_OPTIONS_KEY
+SOURCE_TYPE_LABEL: Final[str] = "Source Type"
 PARENT_CCN_KEY: Final[str] = "parent_ccn"
+PARENT_CCN_LABEL: Final[str] = "Parent Cage Card Number"
 
 SUBJECT_ATTACHMENT_CAPTION: Final[str] = "muronto_subject"
 
@@ -158,7 +167,7 @@ def build_subject_payload(
         errors=animal_id_errors,
     )
     _validate_pattern(
-        field_name=EAR_TAG_KEY,
+        field_name=EAR_TAG_LABEL,
         value=cleaned_ear_tag,
         pattern=EAR_TAG_PATTERN,
         pattern_text=EAR_TAG_PATTERN_TEXT,
@@ -166,7 +175,7 @@ def build_subject_payload(
         errors=errors,
     )
     _validate_pattern(
-        field_name=CCN_KEY,
+        field_name=CCN_LABEL,
         value=cleaned_ccn,
         pattern=CCN_PATTERN,
         pattern_text=CCN_PATTERN_TEXT,
@@ -175,24 +184,24 @@ def build_subject_payload(
     )
 
     if not cleaned_sex:
-        errors.append(f"{SEX_KEY} is required.")
+        errors.append(f"{SEX_LABEL} is required.")
     elif cleaned_sex not in SEX_OPTIONS:
         errors.append(
-            f"{SEX_KEY} must be one of " + ", ".join(SEX_OPTIONS) + "."
+            f"{SEX_LABEL} must be one of " + ", ".join(SEX_OPTIONS) + "."
         )
 
     if not cleaned_source_type:
-        errors.append(f"{SOURCE_TYPE_KEY} is required.")
+        errors.append(f"{SOURCE_TYPE_LABEL} is required.")
 
     _validate_optional_ccn(
-        field_name=PARENT_CCN_KEY,
+        field_name=PARENT_CCN_LABEL,
         value=cleaned_parent_ccn,
         required=cleaned_source_type == PARENT_REQUIRED_SOURCE_TYPE,
         errors=errors,
     )
 
     if not strain_genotypes:
-        errors.append("At least one strain/genotype pair is required.")
+        errors.append("At least one Strain/Genotype pair is required.")
 
     cleaned_pairs: list[tuple[str, str]] = []
     for index, (raw_strain, raw_genotype) in enumerate(
@@ -202,24 +211,24 @@ def build_subject_payload(
         strain = clean_string(raw_strain)
         genotype = clean_string(raw_genotype)
         if not strain:
-            errors.append(f"{STRAIN_OPTIONS_KEY}_{index} is required.")
+            errors.append(f"{STRAIN_LABEL} {index} is required.")
         if not genotype:
-            errors.append(f"{GENOTYPE_KEY}_{index} is required.")
+            errors.append(f"{GENOTYPE_LABEL} {index} is required.")
         elif genotype not in GENOTYPE_OPTIONS:
             errors.append(
-                f"{GENOTYPE_KEY}_{index} must be one of "
+                f"{GENOTYPE_LABEL} {index} must be one of "
                 + ", ".join(GENOTYPE_OPTIONS)
                 + "."
             )
         cleaned_pairs.append((strain, genotype))
 
     formatted_dob = _format_date_or_error(
-        field_name=DOB_KEY,
+        field_name=DOB_LABEL,
         value=dob,
         errors=errors,
     )
     formatted_dow = _format_date_or_error(
-        field_name=DOW_KEY,
+        field_name=DOW_LABEL,
         value=dow,
         errors=errors,
     )

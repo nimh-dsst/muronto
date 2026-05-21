@@ -281,11 +281,15 @@ def test_subject_page_immediately_validates_regex_fields() -> None:
         "Animal ID must match the regex pattern" in error for error in errors
     )
     assert any(
-        "ear_tag must match the regex pattern" in error for error in errors
+        "Ear Tag must match the regex pattern" in error for error in errors
     )
-    assert any("ccn must match the regex pattern" in error for error in errors)
     assert any(
-        "parent_ccn must match the regex pattern" in error for error in errors
+        "Card Cage Number must match the regex pattern" in error
+        for error in errors
+    )
+    assert any(
+        "Parent Cage Card Number must match the regex pattern" in error
+        for error in errors
     )
 
     app.text_input(key="subject_create_animal_id").set_value("123-4567")
@@ -352,8 +356,11 @@ def test_subject_page_saves_and_completes_incomplete_record() -> None:
     subject_entry = page_subject_attachment(page)
     payload = attachment_payload(subject_entry)
     assert payload[SUBJECT_STATUS_KEY] == SUBJECT_STATUS_INCOMPLETE
-    assert "ear_tag is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
-    assert "ccn is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert "Ear Tag is required." in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    assert (
+        "Card Cage Number is required."
+        in payload[SUBJECT_VALIDATION_ERRORS_KEY]
+    )
     assert any(
         "Saved an incomplete subject record" in warning
         for warning in warning_values(app)

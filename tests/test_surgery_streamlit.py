@@ -377,11 +377,11 @@ def test_surgery_page_immediately_validates_regex_fields() -> None:
 
     errors = error_values(app)
     assert any(
-        "PreOp CNN must match the regex pattern" in error
+        "PreOp Card Cage Number must match the regex pattern" in error
         for error in errors
     )
     assert any(
-        "PostOp CNN must match the regex pattern" in error
+        "PostOp Card Cage Number must match the regex pattern" in error
         for error in errors
     )
     assert any(
@@ -541,7 +541,10 @@ def test_surgery_page_saves_and_edits_incomplete_record() -> None:
     assert not app.exception
     payload = attachment_payload(page_surgery_attachment(subject_page))
     assert payload[SURGERY_STATUS_KEY] == SURGERY_STATUS_INCOMPLETE
-    assert "preop_cnn is required." in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    assert (
+        "PreOp Card Cage Number is required."
+        in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    )
     assert payload["weight_pre_g"] is None
 
     surgery_entry = page_surgery_attachment(subject_page)

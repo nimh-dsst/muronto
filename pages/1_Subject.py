@@ -41,19 +41,28 @@ from muronto_app.subject import (
     ANIMAL_ID_PATTERN,
     ANIMAL_ID_PATTERN_TEXT,
     CCN_KEY,
+    CCN_LABEL,
     CCN_PATTERN,
     CCN_PATTERN_TEXT,
     DOB_KEY,
+    DOB_LABEL,
     DOW_KEY,
+    DOW_LABEL,
     EAR_TAG_KEY,
+    EAR_TAG_LABEL,
     EAR_TAG_PATTERN,
     EAR_TAG_PATTERN_TEXT,
     GENOTYPE_KEY,
+    GENOTYPE_LABEL,
     GENOTYPE_OPTIONS,
     PARENT_CCN_KEY,
+    PARENT_CCN_LABEL,
     PARENT_REQUIRED_SOURCE_TYPE,
     SEX_KEY,
+    SEX_LABEL,
     SEX_OPTIONS,
+    SOURCE_TYPE_LABEL,
+    STRAIN_LABEL,
     SUBJECT_VALIDATION_ERRORS_KEY,
     SubjectValidationError,
     build_subject_payload,
@@ -216,15 +225,15 @@ def render_strain_genotypes(
         strain_value = values[index - 1][0] if index <= len(values) else ""
         genotype_value = values[index - 1][1] if index <= len(values) else ""
         strain = render_select_with_other(
-            label=f"strain_{index}",
+            label=f"{STRAIN_LABEL} {index}",
             options=options,
             options_key=STRAIN_OPTIONS_KEY,
             widget_key=f"{form_key}_strain_{index}",
-            other_prompt=f"New strain_{index}",
+            other_prompt=f"New {STRAIN_LABEL} {index}",
             value=strain_value,
         )
         genotype = st.selectbox(
-            f"genotype_{index}",
+            f"{GENOTYPE_LABEL} {index}",
             options=GENOTYPE_OPTIONS,
             key=f"{form_key}_genotype_{index}",
             index=selected_index(GENOTYPE_OPTIONS, genotype_value),
@@ -244,11 +253,11 @@ def render_parent_ccn(
         return ""
 
     render_text_guidance(
-        f"{PARENT_CCN_KEY} must match the regex pattern "
+        f"{PARENT_CCN_LABEL} must match the regex pattern "
         f"`{CCN_PATTERN_TEXT}`, for example `123456`."
     )
     return render_pattern_text_input(
-        label=PARENT_CCN_KEY,
+        label=PARENT_CCN_LABEL,
         value=value,
         key=widget_key,
         pattern=CCN_PATTERN,
@@ -309,8 +318,8 @@ def render_subject_form(
     count_key = f"{form_key}_{SUBJECT_PAIR_COUNT_KEY}"
 
     if st.button(
-        "Add strain/genotype",
-        help="Add another strain and genotype entry box.",
+        "Add Strain/Genotype",
+        help="Add another Strain and Genotype entry.",
         use_container_width=True,
         key=f"{form_key}_add_strain_genotype",
     ):
@@ -331,11 +340,11 @@ def render_subject_form(
     )
 
     render_text_guidance(
-        "ear_tag must match the regex pattern "
+        f"{EAR_TAG_LABEL} must match the regex pattern "
         f"`{EAR_TAG_PATTERN_TEXT}`, for example `123`."
     )
     ear_tag = render_pattern_text_input(
-        label="ear_tag",
+        label=EAR_TAG_LABEL,
         value=payload_defaults.get(EAR_TAG_KEY, ""),
         key=f"{form_key}_ear_tag",
         pattern=EAR_TAG_PATTERN,
@@ -344,11 +353,11 @@ def render_subject_form(
     )
 
     render_text_guidance(
-        "ccn must match the regex pattern "
+        f"{CCN_LABEL} must match the regex pattern "
         f"`{CCN_PATTERN_TEXT}`, for example `123456`."
     )
     ccn = render_pattern_text_input(
-        label="ccn",
+        label=CCN_LABEL,
         value=payload_defaults.get(CCN_KEY, ""),
         key=f"{form_key}_ccn",
         pattern=CCN_PATTERN,
@@ -357,7 +366,7 @@ def render_subject_form(
     )
 
     sex = st.selectbox(
-        "sex",
+        SEX_LABEL,
         options=SEX_OPTIONS,
         key=f"{form_key}_sex",
         index=selected_index(SEX_OPTIONS, payload_defaults.get(SEX_KEY, "")),
@@ -370,22 +379,22 @@ def render_subject_form(
     )
 
     dob = render_subject_date(
-        "dob",
+        DOB_LABEL,
         f"{form_key}_dob",
         parse_subject_date(payload_defaults.get(DOB_KEY)),
     )
     dow = render_subject_date(
-        "dow",
+        DOW_LABEL,
         f"{form_key}_dow",
         parse_subject_date(payload_defaults.get(DOW_KEY)),
     )
 
     source_type = render_select_with_other(
-        label="source_type",
+        label=SOURCE_TYPE_LABEL,
         options=options,
         options_key=SOURCE_TYPE_OPTIONS_KEY,
         widget_key=f"{form_key}_source_type",
-        other_prompt="New source_type",
+        other_prompt=f"New {SOURCE_TYPE_LABEL}",
         value=payload_defaults.get(SOURCE_TYPE_OPTIONS_KEY, ""),
     )
 
