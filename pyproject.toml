@@ -8,13 +8,10 @@ dependencies = [
     "labapi",
     "streamlit>=1.55.0",
 ]
-
-[tool.uv.sources]
-labapi = { git = "ssh://git@github.com/nimh-dsst/labarchives-api.git" }
-
 [dependency-groups]
 dev = [
     "mypy>=1.19.1",
+    "pytest>=8.0.0",
     "ruff>=0.15.7",
 ]
 
@@ -24,9 +21,12 @@ line-length = 79
 [tool.ruff.lint]
 extend-select = ["I", "E501"]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [tool.mypy]
 python_version = "3.12"
-files = ["Login.py"]
+files = ["Project.py", "pages", "muronto_app", "tests"]
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]

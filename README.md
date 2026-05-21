@@ -15,16 +15,19 @@ Example:
 ```bash
 uv sync
 source .venv/bin/activate
-uv run streamlit run Login.py
+uv run streamlit run Project.py
 ```
 
-Note: `labapi` is installed from a GitHub SSH URL, so `uv sync` requires GitHub SSH access to `nimh-dsst/labarchives-api`.
+Note: `labapi` is installed from PyPI.
 
-## Using the Login page
+## Using the Project page
 
-Run the page with `streamlit run Login.py`, then sign in to LabArchives from the browser UI.
+Run the page with `streamlit run Project.py`, then sign in to LabArchives from the browser UI.
 
-1. Configure API access. If `API_URL`, `ACCESS_KEYID`, and `ACCESS_PWD` are set in the environment, the page will use them automatically. Otherwise, enter the API base URL, access key ID, and access key password in the form.
-2. Authenticate with LabArchives. Click `Open LabArchives sign-in` to complete the browser-based flow and return to the page automatically, or enter your LabArchives email and a one-hour auth code manually and click the sign-in button.
-3. After sign-in, choose a notebook, select whether you want to create a new surgery record or open an existing one, and use the notebook navigator to move through folders and pages.
-4. Use `Sign out` to clear the current session and return to the login form.
+1. Configure API access with `ACCESS_KEYID` and `ACCESS_PWD` in the environment. `API_URL` is optional and defaults to `https://api.labarchives.com`.
+2. Authenticate with LabArchives. Click `Open LabArchives sign-in` to complete the browser-based flow and return to the page automatically.
+3. After sign-in, choose a notebook and create or reuse the root-level `muronto_config` page.
+4. If the config JSON attachment is missing or invalid, create a v2 config by adding the first project and selecting its LabArchives home folder. Legacy single-project configs must be replaced.
+5. Use the Project page to select the active project, edit its details, or add another project in the same notebook.
+6. Use the Subject and Surgery pages after selecting the active project.
+7. Use `Sign out` to clear the current session and return to the login form.
