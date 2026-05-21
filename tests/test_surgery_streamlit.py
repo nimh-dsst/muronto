@@ -4,7 +4,7 @@ import html
 import json
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -339,6 +339,18 @@ def test_surgery_page_medications_are_opt_in() -> None:
     assert app.number_input(key="surgery_medication_1_volume")
 
 
+def test_surgery_page_uses_hhmm_text_inputs_for_times() -> None:
+    app = surgery_page_app(FakeHomeFolder([seed_subject_page()])).run()
+
+    assert not app.exception
+    assert app.text_input(key="surgery_start_time").value == ""
+    assert app.text_input(key="surgery_end_time").value == ""
+    assert "surgery_start_time" not in [
+        widget.key for widget in app.time_input
+    ]
+    assert "surgery_end_time" not in [widget.key for widget in app.time_input]
+
+
 def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     subject_page = seed_subject_page()
     app = surgery_page_app(FakeHomeFolder([subject_page])).run()
@@ -355,8 +367,8 @@ def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     app.selectbox(key="surgery_medication_1").select("Meloxicam")
     app.number_input(key="surgery_medication_1_conc_mgml").set_value(5.0)
     app.number_input(key="surgery_medication_1_volume").set_value(0.1)
-    app.time_input(key="surgery_start_time").set_value(time(9, 0))
-    app.time_input(key="surgery_end_time").set_value(time(10, 0))
+    app.text_input(key="surgery_start_time").set_value("0900")
+    app.text_input(key="surgery_end_time").set_value("1000")
     app.number_input(key="surgery_bregma_lambda_dist_mm").set_value(4.2)
     app.selectbox(key="surgery_procedure_1_implant_type").select(
         "Cranial Window"

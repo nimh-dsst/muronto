@@ -37,12 +37,15 @@ from muronto_app.surgery import (
     MIME_TYPE_KEY,
     NOTE_UPLOAD_TYPE,
     SURGERY_FILE_ATTACHMENT_CAPTION,
+    SURGERY_TIME_PATTERN,
+    SURGERY_TIME_PATTERN_TEXT,
     UPLOAD_TYPE_KEY,
     VIRAL_INJECTION_CATEGORY,
     SurgeryValidationError,
     build_surgery_payload,
     format_surgery_date,
     format_surgery_time,
+    format_surgery_time_display,
     medication_names,
     procedure_option_values,
     surgery_json_filename,
@@ -169,6 +172,33 @@ def test_format_surgery_date_uses_yyyymmdd() -> None:
 
 def test_format_surgery_time_uses_hhmm_with_leading_zeroes() -> None:
     assert format_surgery_time(time(9, 5)) == "0905"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(time(9, 5), "9:05 AM"), (time(14, 30), "2:30 PM")],
+)
+def test_format_surgery_time_display_uses_12_hour_clock(
+    value: time,
+    expected: str,
+) -> None:
+    assert format_surgery_time_display(value) == expected
+
+
+@pytest.mark.parametrize("value", ["0000", "0905", "1200", "2359"])
+def test_surgery_time_pattern_accepts_four_digit_24_hour_times(
+    value: str,
+) -> None:
+    assert SURGERY_TIME_PATTERN.fullmatch(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["900", "126", "12:00", "2360", "2400", "9999", "abcd"],
+)
+def test_surgery_time_pattern_rejects_non_hhmm_times(value: str) -> None:
+    assert not SURGERY_TIME_PATTERN.fullmatch(value)
+    assert SURGERY_TIME_PATTERN_TEXT == r"(?:[01]\d|2[0-3])[0-5]\d"
 
 
 def test_surgery_json_filename_uses_animal_id_and_date() -> None:

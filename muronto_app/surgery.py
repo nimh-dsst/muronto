@@ -143,6 +143,10 @@ STOCK_TITER_PATTERN_TEXT: Final[str] = r"\d_\d\d_\d\d"
 STOCK_TITER_PATTERN: Final[re.Pattern[str]] = re.compile(
     rf"^{STOCK_TITER_PATTERN_TEXT}$"
 )
+SURGERY_TIME_PATTERN_TEXT: Final[str] = r"(?:[01]\d|2[0-3])[0-5]\d"
+SURGERY_TIME_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"^{SURGERY_TIME_PATTERN_TEXT}$"
+)
 
 
 class SurgeryValidationError(ValueError):
@@ -161,6 +165,11 @@ def format_surgery_date(value: date) -> str:
 def format_surgery_time(value: time) -> str:
     """Return a surgery time as zero-padded ``HHMM``."""
     return value.strftime("%H%M")
+
+
+def format_surgery_time_display(value: time) -> str:
+    """Return a surgery time for display as ``HH:MM AM/PM``."""
+    return value.strftime("%I:%M %p").lstrip("0")
 
 
 def surgery_json_filename(animal_id: str, surgery_date: str) -> str:

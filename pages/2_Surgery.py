@@ -122,6 +122,7 @@ from muronto_app.surgery import (
     SURGERY_CATEGORY_KEY,
     SURGERY_CATEGORY_OPTIONS,
     SURGERY_DATE_KEY,
+    SURGERY_TIME_PATTERN,
     SURGICAL_PROCEDURES_KEY,
     TAKEN_PHOTO_UPLOAD_TYPE,
     VIRAL_INJECTION_CATEGORY,
@@ -140,6 +141,7 @@ from muronto_app.surgery import (
     build_surgery_payload,
     format_surgery_date,
     format_surgery_time,
+    format_surgery_time_display,
     medication_names,
     procedure_option_values,
     with_surgery_options,
@@ -245,6 +247,9 @@ def parse_surgery_date(value: object) -> date | None:
 def parse_surgery_time(value: object) -> time | None:
     cleaned_value = clean_string(value)
     if not cleaned_value:
+        return None
+
+    if not SURGERY_TIME_PATTERN.fullmatch(cleaned_value):
         return None
 
     try:
@@ -508,16 +513,36 @@ def render_surgery_time(
     *,
     value: time | None = None,
 ) -> time | None:
-    selected_time = st.time_input(
-        label,
-        value=value,
-        key=key,
-        step=60,
+    default_value = (
+        format_surgery_time(value) if isinstance(value, time) else ""
     )
-    if isinstance(selected_time, time):
-        st.write(format_surgery_time(selected_time))
-        return selected_time
-    return None
+    entered_time = clean_string(
+        st.text_input(
+            label,
+            value=default_value,
+            key=key,
+            max_chars=4,
+            placeholder="0900",
+            help=(
+                "Enter 24-hour time as HHMM, for example 0900. "
+                "Leading zeroes are required."
+            ),
+        )
+    )
+    if not entered_time:
+        return None
+
+    if not SURGERY_TIME_PATTERN.fullmatch(entered_time):
+        st.error("Please enter a valid time (HHMM), for example 0900.")
+        return None
+
+    selected_time = parse_surgery_time(entered_time)
+    if selected_time is None:
+        st.error(f"{label} must be a valid 24-hour time.")
+        return None
+
+    st.write(format_surgery_time_display(selected_time))
+    return selected_time
 
 
 def add_reusable_surgery_option(
