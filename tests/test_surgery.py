@@ -442,6 +442,22 @@ def test_build_surgery_payload_supports_multiple_viruses() -> None:
     )
 
 
+def test_build_surgery_payload_supports_not_applicable_flow_test() -> None:
+    kwargs = valid_surgery_kwargs()
+    procedure = valid_viral_procedure()
+    injection = procedure["injections"][0]  # type: ignore[index]
+    infusion = injection["infusions"][0]  # type: ignore[index]
+    infusion["post_infusion_flow_test"] = "n/a"  # type: ignore[index]
+    kwargs["surgical_procedures"] = [procedure]
+
+    payload = build_surgery_payload(**kwargs)
+
+    payload_infusion = payload["surgical_procedures"][0]["injections"][0][
+        "infusions"
+    ][0]
+    assert payload_infusion["post_infusion_flow_test"] == "n/a"
+
+
 def test_build_surgery_payload_supports_multiple_medications() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["medications"] = [

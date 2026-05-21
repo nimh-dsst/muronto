@@ -1091,13 +1091,16 @@ def render_infusions(
             step=10.0,
             key=f"{prefix}_infusion_volume_nl",
         )
+        post_infusion_flow_test_default = (
+            clean_string(defaults.get(POST_INFUSION_FLOW_TEST_KEY)) or "n/a"
+        )
         post_infusion_flow_test = st.selectbox(
             "Post Infusion Flow Test",
             options=POST_INFUSION_FLOW_TEST_OPTIONS,
             key=f"{prefix}_post_infusion_flow_test",
             index=selected_index(
                 POST_INFUSION_FLOW_TEST_OPTIONS,
-                defaults.get(POST_INFUSION_FLOW_TEST_KEY),
+                post_infusion_flow_test_default,
             ),
         )
         notes = st.text_input(

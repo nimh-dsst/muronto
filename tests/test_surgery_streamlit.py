@@ -302,6 +302,21 @@ def page_surgery_text_entry(page: FakePage) -> FakeTextEntry:
     return entries[0]
 
 
+def test_surgery_page_defaults_post_infusion_flow_test_to_na() -> None:
+    app = surgery_page_app(FakeHomeFolder([seed_subject_page()])).run()
+
+    assert not app.exception
+    assert (
+        app.selectbox(
+            key=(
+                "surgery_procedure_1_injection_1_infusion_1_"
+                "post_infusion_flow_test"
+            )
+        ).value
+        == "n/a"
+    )
+
+
 def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     subject_page = seed_subject_page()
     app = surgery_page_app(FakeHomeFolder([subject_page])).run()

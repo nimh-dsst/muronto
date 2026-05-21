@@ -108,7 +108,11 @@ SURGERY_CATEGORY_OPTIONS: Final[tuple[str, ...]] = (
     IMPLANT_CATEGORY,
 )
 HEMISPHERE_OPTIONS: Final[tuple[str, ...]] = ("LH", "RH")
-POST_INFUSION_FLOW_TEST_OPTIONS: Final[tuple[str, ...]] = ("Pass", "Fail")
+POST_INFUSION_FLOW_TEST_OPTIONS: Final[tuple[str, ...]] = (
+    "Pass",
+    "Fail",
+    "n/a",
+)
 ELECTRODE_TYPE_OPTIONS: Final[tuple[str, ...]] = (
     "NeuroPixels",
     "NeuroNexus",
