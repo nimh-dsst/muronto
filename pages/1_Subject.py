@@ -37,6 +37,7 @@ from muronto_app.state import (
 )
 from muronto_app.subject import (
     ANIMAL_ID_KEY,
+    ANIMAL_ID_LABEL,
     ANIMAL_ID_PATTERN,
     ANIMAL_ID_PATTERN_TEXT,
     CCN_KEY,
@@ -317,11 +318,11 @@ def render_subject_form(
         st.rerun()
 
     render_text_guidance(
-        "animal_id must match the regex pattern "
+        f"{ANIMAL_ID_LABEL} must match the regex pattern "
         f"`{ANIMAL_ID_PATTERN_TEXT}`, for example `123-4567`."
     )
     animal_id = render_pattern_text_input(
-        label="animal_id",
+        label=ANIMAL_ID_LABEL,
         value=payload_defaults.get(ANIMAL_ID_KEY, ""),
         key=f"{form_key}_animal_id",
         pattern=ANIMAL_ID_PATTERN,
@@ -439,7 +440,9 @@ def render_subject_form(
     try:
         payload, validation_errors = build_payload_for_save()
     except SubjectValidationError as exc:
-        st.error("Enter a valid animal_id before saving the subject page.")
+        st.error(
+            f"Enter a valid {ANIMAL_ID_LABEL} before saving the subject page."
+        )
         for error in exc.errors:
             st.caption(error)
         return

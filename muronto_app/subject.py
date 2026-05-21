@@ -18,6 +18,7 @@ from muronto_app.config import (
 )
 
 ANIMAL_ID_KEY: Final[str] = "animal_id"
+ANIMAL_ID_LABEL: Final[str] = "Animal ID"
 EAR_TAG_KEY: Final[str] = "ear_tag"
 CCN_KEY: Final[str] = "ccn"
 SEX_KEY: Final[str] = "sex"
@@ -149,7 +150,7 @@ def build_subject_payload(
     errors: list[str] = []
 
     _validate_pattern(
-        field_name=ANIMAL_ID_KEY,
+        field_name=ANIMAL_ID_LABEL,
         value=cleaned_animal_id,
         pattern=ANIMAL_ID_PATTERN,
         pattern_text=ANIMAL_ID_PATTERN_TEXT,

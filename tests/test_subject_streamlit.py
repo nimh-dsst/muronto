@@ -278,7 +278,7 @@ def test_subject_page_immediately_validates_regex_fields() -> None:
 
     errors = error_values(app)
     assert any(
-        "animal_id must match the regex pattern" in error for error in errors
+        "Animal ID must match the regex pattern" in error for error in errors
     )
     assert any(
         "ear_tag must match the regex pattern" in error for error in errors

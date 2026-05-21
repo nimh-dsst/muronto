@@ -98,7 +98,7 @@ def test_build_subject_payload_requires_valid_animal_id_when_incomplete() -> (
         )
 
     assert any(
-        "animal_id must match" in error for error in exc_info.value.errors
+        "Animal ID must match" in error for error in exc_info.value.errors
     )
 
 
@@ -170,7 +170,7 @@ def test_build_subject_payload_validates_identity_patterns() -> None:
         )
 
     assert any(
-        "animal_id must match" in error for error in exc_info.value.errors
+        "Animal ID must match" in error for error in exc_info.value.errors
     )
     assert any(
         "ear_tag must match" in error for error in exc_info.value.errors

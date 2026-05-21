@@ -29,6 +29,7 @@ from muronto_app.config import (
 )
 from muronto_app.subject import (
     ANIMAL_ID_KEY,
+    ANIMAL_ID_LABEL,
     EAR_TAG_KEY,
     SUBJECT_ATTACHMENT_CAPTION,
     SUBJECT_VALIDATION_ERRORS_KEY,
@@ -393,7 +394,7 @@ def create_subject_page_with_json(
     """Create a subject page and attach the flat subject JSON payload."""
     animal_id = clean_string(subject_payload.get(ANIMAL_ID_KEY))
     if not animal_id:
-        raise ValueError("animal_id is required.")
+        raise ValueError(f"{ANIMAL_ID_LABEL} is required.")
 
     container.refresh()
     if child_named(container, animal_id) is not None:
@@ -437,7 +438,7 @@ def save_subject_attachment(
     """Create or update the subject JSON attachment on a subject page."""
     animal_id = clean_string(subject_payload.get(ANIMAL_ID_KEY))
     if not animal_id:
-        raise ValueError("animal_id is required.")
+        raise ValueError(f"{ANIMAL_ID_LABEL} is required.")
 
     filename = subject_json_filename(animal_id)
     existing_entry = find_subject_attachment(page)
@@ -599,7 +600,7 @@ def save_surgery_attachment(
     animal_id = clean_string(surgery_payload.get(ANIMAL_ID_KEY))
     file_token = surgery_record_file_token(surgery_payload)
     if not animal_id:
-        raise ValueError("animal_id is required.")
+        raise ValueError(f"{ANIMAL_ID_LABEL} is required.")
     if not file_token:
         raise ValueError("surgery_date or surgery_draft_id is required.")
 

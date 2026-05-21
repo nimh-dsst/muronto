@@ -30,7 +30,7 @@ from muronto_app.config import (
     clean_string,
     normalize_options,
 )
-from muronto_app.subject import ANIMAL_ID_KEY, EAR_TAG_KEY
+from muronto_app.subject import ANIMAL_ID_KEY, ANIMAL_ID_LABEL, EAR_TAG_KEY
 
 SURGERY_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery"
 SURGERY_FILE_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery_attachment"
@@ -1011,7 +1011,7 @@ def build_surgery_payload(
     for field_name, value in (
         (PROJECT_ID_KEY, cleaned_project_id),
         (INVESTIGATOR_KEY, cleaned_investigator),
-        (ANIMAL_ID_KEY, cleaned_animal_id),
+        (ANIMAL_ID_LABEL, cleaned_animal_id),
         (EAR_TAG_KEY, cleaned_ear_tag),
         (SURGEON_KEY, cleaned_surgeon),
     ):
