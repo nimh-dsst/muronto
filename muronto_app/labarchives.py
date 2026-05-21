@@ -418,6 +418,39 @@ def find_subject_attachment(page: Any) -> Any | None:
     return None
 
 
+def save_subject_attachment(
+    page: Any,
+    subject_payload: Mapping[str, Any],
+) -> SubjectWriteResult:
+    """Create or update the subject JSON attachment on a subject page."""
+    animal_id = clean_string(subject_payload.get(ANIMAL_ID_KEY))
+    if not animal_id:
+        raise ValueError("animal_id is required.")
+
+    filename = subject_json_filename(animal_id)
+    existing_entry = find_subject_attachment(page)
+    if existing_entry is not None:
+        existing_entry.content = _json_attachment_content(
+            subject_payload,
+            filename=filename,
+            caption=SUBJECT_ATTACHMENT_CAPTION,
+        )
+        _sync_json_reference_text_entry(
+            page,
+            subject_payload,
+            attachment_entry=existing_entry,
+            caption=SUBJECT_ATTACHMENT_CAPTION,
+        )
+        return SubjectWriteResult(page=page, attachment_entry=existing_entry)
+
+    attachment_entry, _text_entry = page.entries.create_json_entry(
+        dict(subject_payload),
+        filename=filename,
+        caption=SUBJECT_ATTACHMENT_CAPTION,
+    )
+    return SubjectWriteResult(page=page, attachment_entry=attachment_entry)
+
+
 def read_subject_attachment(page: Any) -> dict[str, str] | None:
     """Read a page's subject JSON attachment when it is valid enough for UI."""
     entry = find_subject_attachment(page)

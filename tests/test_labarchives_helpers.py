@@ -32,6 +32,7 @@ from muronto_app.labarchives import (
     read_config_attachment,
     resolve_notebook_folder,
     save_config_attachment,
+    save_subject_attachment,
     save_surgery_attachment,
     save_surgery_file_attachment,
 )
@@ -436,6 +437,59 @@ def test_discover_subject_records_recurses_folders() -> None:
     assert records[0].payload[EAR_TAG_KEY] == "123"
     assert root_folder.refreshed == 1
     assert nested_folder.refreshed == 1
+
+
+def test_save_subject_attachment_updates_entry_and_text() -> None:
+    entry = FakeEntry(
+        {
+            "animal_id": "123-4567",
+            "ear_tag": "123",
+            "ccn": "123456",
+            "sex": "M",
+            "strain_1": "Ai14",
+            "genotype_1": "Het",
+            "dob": "20240102",
+            "dow": "20240109",
+            "source_type": "JAX",
+            "parent_ccn": "",
+        },
+        filename="123-4567.json",
+        caption=SUBJECT_ATTACHMENT_CAPTION,
+        entry_id="subject-entry",
+    )
+    text_entry = FakeTextEntry(
+        "<p>Reference Attachment: muronto_subject</p>"
+        "<p>Entry ID: subject-entry</p>"
+        "<pre>old preview</pre>"
+    )
+    page = FakePage([entry, text_entry], name="123-4567")
+    payload = {
+        "animal_id": "765-4321",
+        "ear_tag": "456",
+        "ccn": "654321",
+        "sex": "F",
+        "strain_1": "Ai14",
+        "genotype_1": "WT",
+        "dob": "20240203",
+        "dow": "20240210",
+        "source_type": "Breeding",
+        "parent_ccn": "123456",
+    }
+
+    result = save_subject_attachment(page, payload)
+
+    assert result.attachment_entry is entry
+    assert len(page.entries) == 2
+    assert entry.updated_content is not None
+    assert entry.updated_content.filename == "765-4321.json"
+    assert entry.updated_content.caption == SUBJECT_ATTACHMENT_CAPTION
+    assert text_entry.updated_content is not None
+    assert (
+        "Reference Attachment: muronto_subject" in text_entry.updated_content
+    )
+    assert "Entry ID: subject-entry" in text_entry.updated_content
+    assert "765-4321" in text_entry.updated_content
+    assert "old preview" not in text_entry.updated_content
 
 
 def test_save_surgery_attachment_creates_and_updates_by_filename() -> None:

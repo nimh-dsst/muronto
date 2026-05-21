@@ -4,6 +4,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 import streamlit as st
@@ -32,15 +33,27 @@ def test_render_parent_ccn_hides_for_non_breeding_source_type(
     markdown_calls: list[str] = []
     text_input_calls: list[str] = []
 
+    def record_markdown(text: str) -> None:
+        markdown_calls.append(text)
+
+    def record_text_input(
+        label: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> str:
+        del args, kwargs
+        text_input_calls.append(label)
+        return ""
+
     monkeypatch.setattr(
         st,
         "markdown",
-        lambda text: markdown_calls.append(text),
+        record_markdown,
     )
     monkeypatch.setattr(
         st,
         "text_input",
-        lambda label, *args, **kwargs: text_input_calls.append(label) or "",
+        record_text_input,
     )
 
     assert subject_page.render_parent_ccn("JAX") == ""
@@ -55,16 +68,27 @@ def test_render_parent_ccn_shows_for_breeding_source_type(
     markdown_calls: list[str] = []
     text_input_calls: list[str] = []
 
+    def record_markdown(text: str) -> None:
+        markdown_calls.append(text)
+
+    def record_text_input(
+        label: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> str:
+        del args, kwargs
+        text_input_calls.append(label)
+        return "654321"
+
     monkeypatch.setattr(
         st,
         "markdown",
-        lambda text: markdown_calls.append(text),
+        record_markdown,
     )
     monkeypatch.setattr(
         st,
         "text_input",
-        lambda label, *args, **kwargs: text_input_calls.append(label)
-        or "654321",
+        record_text_input,
     )
 
     assert subject_page.render_parent_ccn("Breeding") == "654321"
