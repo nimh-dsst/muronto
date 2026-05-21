@@ -517,9 +517,15 @@ def test_build_surgery_payload_requires_perioperative_fields() -> None:
     assert "start_time must be selected." in exc_info.value.errors
     assert "end_time must be selected." in exc_info.value.errors
     assert "bregma_lambda_dist_mm is required." in exc_info.value.errors
-    assert (
-        "medications must include at least one entry." in exc_info.value.errors
-    )
+
+
+def test_build_surgery_payload_supports_empty_medications() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["medications"] = []
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload["medications"] == []
 
 
 def test_build_surgery_payload_requires_surgical_procedures() -> None:

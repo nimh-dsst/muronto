@@ -779,7 +779,7 @@ def render_selected_subject(record: SubjectRecord) -> None:
 
 def increment_medication_count(form_key: str) -> None:
     count_key = surgery_count_key(form_key, SURGERY_MEDICATION_COUNT_KEY)
-    st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+    st.session_state[count_key] = st.session_state.get(count_key, 0) + 1
 
 
 def render_medications(
@@ -789,7 +789,7 @@ def render_medications(
     values: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, object]]:
     count_key = surgery_count_key(form_key, SURGERY_MEDICATION_COUNT_KEY)
-    st.session_state.setdefault(count_key, max(1, len(values)))
+    st.session_state.setdefault(count_key, len(values))
 
     medications: list[dict[str, object]] = []
     for index in range(1, st.session_state[count_key] + 1):
@@ -851,21 +851,6 @@ def render_perioperative_monitoring(
             key=surgery_key(form_key, "weight_post_g"),
         )
 
-        st.markdown("#### Medications")
-        if st.button(
-            "Add medication",
-            help="Add another medication entry.",
-            use_container_width=True,
-            key=surgery_key(form_key, "add_medication"),
-        ):
-            increment_medication_count(form_key)
-            st.rerun()
-        medications = render_medications(
-            options,
-            form_key=form_key,
-            values=mapping_list_default(defaults.get(MEDICATIONS_KEY)),
-        )
-
         start_time = render_surgery_time(
             "Start Time",
             surgery_key(form_key, "start_time"),
@@ -882,6 +867,25 @@ def render_perioperative_monitoring(
             value=number_default(defaults.get(BREGMA_LAMBDA_DIST_MM_KEY)),
             step=0.1,
             key=surgery_key(form_key, "bregma_lambda_dist_mm"),
+        )
+
+        st.markdown("#### Medications")
+        st.caption(
+            "Press Add medication only if medications were given to the "
+            "subject."
+        )
+        if st.button(
+            "Add medication",
+            help="Add another medication entry.",
+            use_container_width=True,
+            key=surgery_key(form_key, "add_medication"),
+        ):
+            increment_medication_count(form_key)
+            st.rerun()
+        medications = render_medications(
+            options,
+            form_key=form_key,
+            values=mapping_list_default(defaults.get(MEDICATIONS_KEY)),
         )
 
     return {

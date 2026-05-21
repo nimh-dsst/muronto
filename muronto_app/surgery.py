@@ -281,9 +281,6 @@ def _validate_medications(
             }
         )
 
-    if not medications:
-        errors.append(f"{MEDICATIONS_KEY} must include at least one entry.")
-
     return medications
 
 

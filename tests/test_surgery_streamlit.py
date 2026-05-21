@@ -317,10 +317,33 @@ def test_surgery_page_defaults_post_infusion_flow_test_to_na() -> None:
     )
 
 
+def test_surgery_page_medications_are_opt_in() -> None:
+    app = surgery_page_app(FakeHomeFolder([seed_subject_page()])).run()
+
+    assert not app.exception
+    assert "surgery_medication_1" not in [
+        widget.key for widget in app.selectbox
+    ]
+    assert "surgery_medication_1_conc_mgml" not in [
+        widget.key for widget in app.number_input
+    ]
+    assert "surgery_medication_1_volume" not in [
+        widget.key for widget in app.number_input
+    ]
+
+    app.button(key="surgery_add_medication").click().run()
+
+    assert not app.exception
+    assert app.selectbox(key="surgery_medication_1")
+    assert app.number_input(key="surgery_medication_1_conc_mgml")
+    assert app.number_input(key="surgery_medication_1_volume")
+
+
 def test_surgery_page_create_then_edit_updates_json_and_text() -> None:
     subject_page = seed_subject_page()
     app = surgery_page_app(FakeHomeFolder([subject_page])).run()
 
+    app.button(key="surgery_add_medication").click().run()
     app.selectbox(key="surgery_procedure_1_category").select("Implant").run()
 
     app.selectbox(key="surgery_surgeon").select("SL")
