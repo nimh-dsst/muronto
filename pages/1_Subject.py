@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from datetime import date
+import re
+from collections.abc import Sequence
+from datetime import date, datetime
 from typing import Any
 
 import streamlit as st
@@ -17,10 +19,13 @@ from muronto_app.config import (
     normalize_options,
 )
 from muronto_app.labarchives import (
+    SubjectRecord,
     create_subject_page_with_json,
+    discover_subject_records,
     find_root_config_page,
     resolve_notebook_folder,
     save_config_attachment,
+    save_subject_attachment,
 )
 from muronto_app.page_helpers import render_project_context
 from muronto_app.state import (
@@ -31,14 +36,38 @@ from muronto_app.state import (
     SELECTED_NOTEBOOK_STATE_KEY,
 )
 from muronto_app.subject import (
+    ANIMAL_ID_KEY,
+    ANIMAL_ID_LABEL,
+    ANIMAL_ID_PATTERN,
     ANIMAL_ID_PATTERN_TEXT,
+    CCN_KEY,
+    CCN_LABEL,
+    CCN_PATTERN,
     CCN_PATTERN_TEXT,
+    DOB_KEY,
+    DOB_LABEL,
+    DOW_KEY,
+    DOW_LABEL,
+    EAR_TAG_KEY,
+    EAR_TAG_LABEL,
+    EAR_TAG_PATTERN,
     EAR_TAG_PATTERN_TEXT,
+    GENOTYPE_KEY,
+    GENOTYPE_LABEL,
     GENOTYPE_OPTIONS,
+    PARENT_CCN_KEY,
+    PARENT_CCN_LABEL,
+    PARENT_REQUIRED_SOURCE_TYPE,
+    SEX_KEY,
+    SEX_LABEL,
     SEX_OPTIONS,
+    SOURCE_TYPE_LABEL,
+    STRAIN_LABEL,
+    SUBJECT_VALIDATION_ERRORS_KEY,
     SubjectValidationError,
     build_subject_payload,
     format_subject_date,
+    is_subject_incomplete,
     subject_strains,
     with_subject_options,
 )
@@ -46,10 +75,83 @@ from muronto_app.subject import (
 st.set_page_config(page_title="Muronto Subject", layout="centered")
 
 SUBJECT_PAIR_COUNT_KEY = "subject_strain_genotype_count"
+SUBJECT_EDIT_MODE_KEY = "subject_edit_existing"
+SUBJECT_SELECTED_RECORD_KEY = "subject_edit_record"
 
 
 def render_text_guidance(text: str) -> None:
     st.markdown(text)
+
+
+def render_pattern_text_input(
+    *,
+    label: str,
+    value: object = "",
+    key: str,
+    pattern: re.Pattern[str],
+    pattern_text: str,
+    example: str,
+) -> str:
+    entered_value = clean_string(
+        st.text_input(label, value=clean_string(value), key=key)
+    )
+    if entered_value and not pattern.fullmatch(entered_value):
+        st.error(
+            f"{label} must match the regex pattern `{pattern_text}`, "
+            f"for example `{example}`."
+        )
+    return entered_value
+
+
+def selected_index(options: Sequence[str], value: str) -> int:
+    cleaned_value = clean_string(value)
+    if cleaned_value in options:
+        return options.index(cleaned_value)
+    return 0
+
+
+def subject_label(record: SubjectRecord) -> str:
+    animal_id = clean_string(record.payload.get(ANIMAL_ID_KEY)) or "Unknown"
+    ear_tag = clean_string(record.payload.get(EAR_TAG_KEY))
+    label = f"{animal_id} - Ear Tag {ear_tag}" if ear_tag else animal_id
+    if is_subject_incomplete(record.payload):
+        label = f"{label} (incomplete)"
+    return label
+
+
+def subject_record_widget_key(record: SubjectRecord) -> str:
+    page_id = clean_string(getattr(record.page, "id", ""))
+    if page_id:
+        return page_id
+    return clean_string(record.payload.get(ANIMAL_ID_KEY)) or "selected"
+
+
+def parse_subject_date(value: object) -> date | None:
+    cleaned_value = clean_string(value)
+    if not cleaned_value:
+        return None
+
+    try:
+        return datetime.strptime(cleaned_value, "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def subject_strain_genotypes(
+    payload: dict[str, Any],
+) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    index = 1
+    while (
+        f"{STRAIN_OPTIONS_KEY}_{index}" in payload
+        or f"{GENOTYPE_KEY}_{index}" in payload
+    ):
+        strain = clean_string(payload.get(f"{STRAIN_OPTIONS_KEY}_{index}"))
+        genotype = clean_string(payload.get(f"{GENOTYPE_KEY}_{index}"))
+        if strain or genotype:
+            pairs.append((strain, genotype))
+        index += 1
+    return pairs
 
 
 def render_select_with_other(
@@ -59,9 +161,23 @@ def render_select_with_other(
     options_key: str,
     widget_key: str,
     other_prompt: str,
+    value: str = "",
 ) -> str:
     choices = choice_options(options, options_key)
-    selected = st.selectbox(label, options=choices, key=widget_key)
+    cleaned_value = clean_string(value)
+    if cleaned_value in choices:
+        index = choices.index(cleaned_value)
+    elif cleaned_value:
+        index = choices.index(OTHER_CHOICE)
+    else:
+        index = 0
+
+    selected = st.selectbox(
+        label,
+        options=choices,
+        key=widget_key,
+        index=index,
+    )
     if selected != OTHER_CHOICE:
         return selected
 
@@ -69,14 +185,19 @@ def render_select_with_other(
         st.text_input(
             other_prompt,
             key=f"{widget_key}_other",
+            value="" if cleaned_value in choices else cleaned_value,
         )
     )
 
 
-def render_subject_date(label: str, key: str) -> date | None:
+def render_subject_date(
+    label: str,
+    key: str,
+    value: date | None = None,
+) -> date | None:
     selected_date = st.date_input(
         label,
-        value=None,
+        value=value,
         key=key,
         format="YYYY/MM/DD",
     )
@@ -86,46 +207,75 @@ def render_subject_date(label: str, key: str) -> date | None:
     return None
 
 
-def increment_strain_genotype_count() -> None:
-    st.session_state[SUBJECT_PAIR_COUNT_KEY] = (
-        st.session_state.get(SUBJECT_PAIR_COUNT_KEY, 1) + 1
-    )
+def increment_strain_genotype_count(count_key: str) -> None:
+    st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
 
 
 def render_strain_genotypes(
     options: dict[str, list[str]],
+    *,
+    form_key: str,
+    values: Sequence[tuple[str, str]] = (),
 ) -> list[tuple[str, str]]:
-    st.session_state.setdefault(SUBJECT_PAIR_COUNT_KEY, 1)
+    count_key = f"{form_key}_{SUBJECT_PAIR_COUNT_KEY}"
+    st.session_state.setdefault(count_key, max(1, len(values)))
 
     strain_genotypes: list[tuple[str, str]] = []
-    for index in range(1, st.session_state[SUBJECT_PAIR_COUNT_KEY] + 1):
+    for index in range(1, st.session_state[count_key] + 1):
+        strain_value = values[index - 1][0] if index <= len(values) else ""
+        genotype_value = values[index - 1][1] if index <= len(values) else ""
         strain = render_select_with_other(
-            label=f"strain_{index}",
+            label=f"{STRAIN_LABEL} {index}",
             options=options,
             options_key=STRAIN_OPTIONS_KEY,
-            widget_key=f"subject_strain_{index}",
-            other_prompt=f"New strain_{index}",
+            widget_key=f"{form_key}_strain_{index}",
+            other_prompt=f"New {STRAIN_LABEL} {index}",
+            value=strain_value,
         )
         genotype = st.selectbox(
-            f"genotype_{index}",
+            f"{GENOTYPE_LABEL} {index}",
             options=GENOTYPE_OPTIONS,
-            key=f"subject_genotype_{index}",
+            key=f"{form_key}_genotype_{index}",
+            index=selected_index(GENOTYPE_OPTIONS, genotype_value),
         )
         strain_genotypes.append((strain, genotype))
 
     return strain_genotypes
 
 
+def render_parent_ccn(
+    source_type: str,
+    *,
+    value: str = "",
+    widget_key: str = PARENT_CCN_KEY,
+) -> str:
+    if clean_string(source_type) != PARENT_REQUIRED_SOURCE_TYPE:
+        return ""
+
+    render_text_guidance(
+        f"{PARENT_CCN_LABEL} must match the regex pattern "
+        f"`{CCN_PATTERN_TEXT}`, for example `123456`."
+    )
+    return render_pattern_text_input(
+        label=PARENT_CCN_LABEL,
+        value=value,
+        key=widget_key,
+        pattern=CCN_PATTERN,
+        pattern_text=CCN_PATTERN_TEXT,
+        example="123456",
+    )
+
+
 def save_reusable_subject_options(
     *,
     notebook: Any,
     config: dict[str, Any],
-    payload: dict[str, str],
+    payload: dict[str, Any],
 ) -> None:
     updated_config, changed = with_subject_options(
         config,
         strains=subject_strains(payload),
-        source_type=payload[SOURCE_TYPE_OPTIONS_KEY],
+        source_type=clean_string(payload.get(SOURCE_TYPE_OPTIONS_KEY)),
     )
     if not changed:
         return
@@ -136,7 +286,7 @@ def save_reusable_subject_options(
 
     if config_page is None:
         st.warning(
-            "Created the subject page, but could not find muronto_config to "
+            "Saved the subject page, but could not find muronto_config to "
             "save reusable subject options."
         )
         return
@@ -153,70 +303,122 @@ def save_reusable_subject_options(
 
 
 def render_subject_form(
+    *,
     notebook: Any,
     config: dict[str, Any],
-    project: dict[str, str],
+    home_folder: Any,
+    existing_record: SubjectRecord | None = None,
 ) -> None:
     options = normalize_options(config.get(OPTIONS_KEY))
+    payload_defaults = existing_record.payload if existing_record else {}
+    is_editing = existing_record is not None
+    form_key = "subject_create"
+    if existing_record is not None:
+        form_key = f"subject_edit_{subject_record_widget_key(existing_record)}"
+    count_key = f"{form_key}_{SUBJECT_PAIR_COUNT_KEY}"
 
     if st.button(
-        "Add strain/genotype",
-        help="Add another strain and genotype entry box.",
+        "Add Strain/Genotype",
+        help="Add another Strain and Genotype entry.",
         use_container_width=True,
+        key=f"{form_key}_add_strain_genotype",
     ):
-        increment_strain_genotype_count()
+        increment_strain_genotype_count(count_key)
         st.rerun()
 
     render_text_guidance(
-        "animal_id must match the regex pattern "
+        f"{ANIMAL_ID_LABEL} must match the regex pattern "
         f"`{ANIMAL_ID_PATTERN_TEXT}`, for example `123-4567`."
     )
-    animal_id = st.text_input("animal_id")
+    animal_id = render_pattern_text_input(
+        label=ANIMAL_ID_LABEL,
+        value=payload_defaults.get(ANIMAL_ID_KEY, ""),
+        key=f"{form_key}_animal_id",
+        pattern=ANIMAL_ID_PATTERN,
+        pattern_text=ANIMAL_ID_PATTERN_TEXT,
+        example="123-4567",
+    )
 
     render_text_guidance(
-        "ear_tag must match the regex pattern "
+        f"{EAR_TAG_LABEL} must match the regex pattern "
         f"`{EAR_TAG_PATTERN_TEXT}`, for example `123`."
     )
-    ear_tag = st.text_input("ear_tag")
+    ear_tag = render_pattern_text_input(
+        label=EAR_TAG_LABEL,
+        value=payload_defaults.get(EAR_TAG_KEY, ""),
+        key=f"{form_key}_ear_tag",
+        pattern=EAR_TAG_PATTERN,
+        pattern_text=EAR_TAG_PATTERN_TEXT,
+        example="123",
+    )
 
     render_text_guidance(
-        "ccn must match the regex pattern "
+        f"{CCN_LABEL} must match the regex pattern "
         f"`{CCN_PATTERN_TEXT}`, for example `123456`."
     )
-    ccn = st.text_input("ccn")
+    ccn = render_pattern_text_input(
+        label=CCN_LABEL,
+        value=payload_defaults.get(CCN_KEY, ""),
+        key=f"{form_key}_ccn",
+        pattern=CCN_PATTERN,
+        pattern_text=CCN_PATTERN_TEXT,
+        example="123456",
+    )
 
-    sex = st.selectbox("sex", options=SEX_OPTIONS, key="subject_sex")
+    sex = st.selectbox(
+        SEX_LABEL,
+        options=SEX_OPTIONS,
+        key=f"{form_key}_sex",
+        index=selected_index(SEX_OPTIONS, payload_defaults.get(SEX_KEY, "")),
+    )
 
-    strain_genotypes = render_strain_genotypes(options)
+    strain_genotypes = render_strain_genotypes(
+        options,
+        form_key=form_key,
+        values=subject_strain_genotypes(payload_defaults),
+    )
 
-    dob = render_subject_date("dob", "subject_dob")
-    dow = render_subject_date("dow", "subject_dow")
+    dob = render_subject_date(
+        DOB_LABEL,
+        f"{form_key}_dob",
+        parse_subject_date(payload_defaults.get(DOB_KEY)),
+    )
+    dow = render_subject_date(
+        DOW_LABEL,
+        f"{form_key}_dow",
+        parse_subject_date(payload_defaults.get(DOW_KEY)),
+    )
 
     source_type = render_select_with_other(
-        label="source_type",
+        label=SOURCE_TYPE_LABEL,
         options=options,
         options_key=SOURCE_TYPE_OPTIONS_KEY,
-        widget_key="subject_source_type",
-        other_prompt="New source_type",
+        widget_key=f"{form_key}_source_type",
+        other_prompt=f"New {SOURCE_TYPE_LABEL}",
+        value=payload_defaults.get(SOURCE_TYPE_OPTIONS_KEY, ""),
     )
 
-    render_text_guidance(
-        "parent_ccn must match the regex pattern "
-        f"`{CCN_PATTERN_TEXT}`, for example `123456`."
+    parent_ccn = render_parent_ccn(
+        source_type,
+        value=payload_defaults.get(PARENT_CCN_KEY, ""),
+        widget_key=f"{form_key}_parent_ccn",
     )
-    parent_ccn = st.text_input("parent_ccn")
 
+    submit_label = (
+        "Save subject edits" if is_editing else "Create subject page"
+    )
     submitted = st.button(
-        "Create subject page",
+        submit_label,
         type="primary",
         use_container_width=True,
+        key=f"{form_key}_submit",
     )
 
     if not submitted:
         return
 
-    try:
-        payload = build_subject_payload(
+    def build_payload(*, allow_incomplete: bool) -> dict[str, Any]:
+        return build_subject_payload(
             animal_id=animal_id,
             ear_tag=ear_tag,
             ccn=ccn,
@@ -226,21 +428,41 @@ def render_subject_form(
             dow=dow,
             source_type=source_type,
             parent_ccn=parent_ccn,
+            allow_incomplete=allow_incomplete,
         )
+
+    def build_payload_for_save() -> tuple[dict[str, Any], list[str]]:
+        try:
+            return build_payload(allow_incomplete=False), []
+        except SubjectValidationError:
+            incomplete_payload = build_payload(allow_incomplete=True)
+            validation_errors = [
+                error
+                for error in incomplete_payload.get(
+                    SUBJECT_VALIDATION_ERRORS_KEY,
+                    [],
+                )
+                if isinstance(error, str) and error
+            ]
+            return incomplete_payload, validation_errors
+
+    try:
+        payload, validation_errors = build_payload_for_save()
     except SubjectValidationError as exc:
-        st.error("Complete the subject form before creating the page.")
+        st.error(
+            f"Enter a valid {ANIMAL_ID_LABEL} before saving the subject page."
+        )
         for error in exc.errors:
             st.caption(error)
         return
 
     try:
-        home_folder = resolve_notebook_folder(
-            notebook,
-            project[LA_HOME_FOLDER_KEY],
-        )
-        result = create_subject_page_with_json(home_folder, payload)
+        if existing_record is None:
+            result = create_subject_page_with_json(home_folder, payload)
+        else:
+            result = save_subject_attachment(existing_record.page, payload)
     except ApiError as exc:
-        st.error(f"Unable to create the subject page: {exc}")
+        st.error(f"Unable to save the subject page: {exc}")
         return
     except ValueError as exc:
         st.error(str(exc))
@@ -254,13 +476,29 @@ def render_subject_form(
         )
     except ApiError as exc:
         st.warning(
-            "Created the subject page, but could not save reusable subject "
+            "Saved the subject page, but could not save reusable subject "
             f"options to muronto_config: {exc}"
         )
 
-    st.success(f"Created subject page `{result.page.name}`.")
+    action = "Updated" if is_editing else "Created"
+    if is_subject_incomplete(payload):
+        st.warning(
+            "Saved an incomplete subject record. Return to Edit existing "
+            "subject to complete it."
+        )
+        for error in validation_errors:
+            st.caption(error)
+    st.success(f"{action} subject page `{result.page.name}`.")
     with st.expander("Subject JSON", expanded=True):
         st.json(payload)
+
+
+def load_subject_records(home_folder: Any) -> list[SubjectRecord] | None:
+    try:
+        return discover_subject_records(home_folder)
+    except ApiError as exc:
+        st.error(f"Unable to load subjects from LabArchives: {exc}")
+    return None
 
 
 def main() -> None:
@@ -276,7 +514,50 @@ def main() -> None:
         return
 
     st.subheader("Subject")
-    render_subject_form(notebook, config, project)
+    edit_existing = st.toggle(
+        "Edit existing subject",
+        key=SUBJECT_EDIT_MODE_KEY,
+    )
+
+    try:
+        home_folder = resolve_notebook_folder(
+            notebook,
+            project[LA_HOME_FOLDER_KEY],
+        )
+    except ApiError as exc:
+        st.error(f"Unable to open the LabArchives home folder: {exc}")
+        return
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+
+    if not edit_existing:
+        render_subject_form(
+            notebook=notebook,
+            config=config,
+            home_folder=home_folder,
+        )
+        return
+
+    subject_records = load_subject_records(home_folder)
+    if subject_records is None:
+        return
+    if not subject_records:
+        st.info("No subject JSON records were found in the project folder.")
+        return
+
+    selected_subject_index = st.selectbox(
+        "Subject",
+        options=list(range(len(subject_records))),
+        format_func=lambda index: subject_label(subject_records[index]),
+        key=SUBJECT_SELECTED_RECORD_KEY,
+    )
+    render_subject_form(
+        notebook=notebook,
+        config=config,
+        home_folder=home_folder,
+        existing_record=subject_records[selected_subject_index],
+    )
 
 
 if __name__ == "__main__":

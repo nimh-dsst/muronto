@@ -29,8 +29,10 @@ from muronto_app.config import (
 )
 from muronto_app.subject import (
     ANIMAL_ID_KEY,
+    ANIMAL_ID_LABEL,
     EAR_TAG_KEY,
     SUBJECT_ATTACHMENT_CAPTION,
+    SUBJECT_VALIDATION_ERRORS_KEY,
     subject_json_filename,
 )
 from muronto_app.surgery import (
@@ -40,10 +42,13 @@ from muronto_app.surgery import (
     MIME_TYPE_KEY,
     SURGERY_ATTACHMENT_CAPTION,
     SURGERY_DATE_KEY,
+    SURGERY_DRAFT_ID_KEY,
     SURGERY_FILE_ATTACHMENT_CAPTION,
     SURGERY_FILE_UPLOAD_TYPES,
     UPLOAD_TYPE_KEY,
+    normalize_surgery_payload,
     surgery_json_filename,
+    surgery_record_file_token,
 )
 
 
@@ -69,7 +74,7 @@ class SubjectRecord:
     """A subject JSON payload paired with its LabArchives page."""
 
     page: Any
-    payload: dict[str, str]
+    payload: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,15 @@ class SurgeryWriteResult:
     page: Any
     attachment_entry: Any
     created: bool
+
+
+@dataclass(frozen=True)
+class SurgeryRecord:
+    """A surgery JSON payload paired with its LabArchives attachment entry."""
+
+    page: Any
+    attachment_entry: Any
+    payload: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -381,7 +395,7 @@ def create_subject_page_with_json(
     """Create a subject page and attach the flat subject JSON payload."""
     animal_id = clean_string(subject_payload.get(ANIMAL_ID_KEY))
     if not animal_id:
-        raise ValueError("animal_id is required.")
+        raise ValueError(f"{ANIMAL_ID_LABEL} is required.")
 
     container.refresh()
     if child_named(container, animal_id) is not None:
@@ -418,7 +432,40 @@ def find_subject_attachment(page: Any) -> Any | None:
     return None
 
 
-def read_subject_attachment(page: Any) -> dict[str, str] | None:
+def save_subject_attachment(
+    page: Any,
+    subject_payload: Mapping[str, Any],
+) -> SubjectWriteResult:
+    """Create or update the subject JSON attachment on a subject page."""
+    animal_id = clean_string(subject_payload.get(ANIMAL_ID_KEY))
+    if not animal_id:
+        raise ValueError(f"{ANIMAL_ID_LABEL} is required.")
+
+    filename = subject_json_filename(animal_id)
+    existing_entry = find_subject_attachment(page)
+    if existing_entry is not None:
+        existing_entry.content = _json_attachment_content(
+            subject_payload,
+            filename=filename,
+            caption=SUBJECT_ATTACHMENT_CAPTION,
+        )
+        _sync_json_reference_text_entry(
+            page,
+            subject_payload,
+            attachment_entry=existing_entry,
+            caption=SUBJECT_ATTACHMENT_CAPTION,
+        )
+        return SubjectWriteResult(page=page, attachment_entry=existing_entry)
+
+    attachment_entry, _text_entry = page.entries.create_json_entry(
+        dict(subject_payload),
+        filename=filename,
+        caption=SUBJECT_ATTACHMENT_CAPTION,
+    )
+    return SubjectWriteResult(page=page, attachment_entry=attachment_entry)
+
+
+def read_subject_attachment(page: Any) -> dict[str, Any] | None:
     """Read a page's subject JSON attachment when it is valid enough for UI."""
     entry = find_subject_attachment(page)
     if entry is None:
@@ -432,11 +479,21 @@ def read_subject_attachment(page: Any) -> dict[str, str] | None:
     if not isinstance(decoded, Mapping):
         return None
 
-    payload = {
-        clean_string(key): clean_string(value)
-        for key, value in decoded.items()
-        if clean_string(key)
-    }
+    payload: dict[str, Any] = {}
+    for raw_key, raw_value in decoded.items():
+        key = clean_string(raw_key)
+        if not key:
+            continue
+        if key == SUBJECT_VALIDATION_ERRORS_KEY and isinstance(
+            raw_value,
+            list,
+        ):
+            payload[key] = [
+                error for value in raw_value if (error := clean_string(value))
+            ]
+            continue
+        payload[key] = clean_string(raw_value)
+
     if not payload.get(ANIMAL_ID_KEY):
         return None
     return payload
@@ -482,40 +539,97 @@ def find_surgery_attachment(page: Any, filename: str) -> Any | None:
     return None
 
 
+def read_surgery_attachment(entry: Any) -> dict[str, Any] | None:
+    """Read a surgery JSON attachment when it is valid enough for UI."""
+    try:
+        decoded = _read_json_attachment(entry)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(decoded, Mapping):
+        return None
+
+    payload = normalize_surgery_payload(
+        {
+            key: value
+            for raw_key, value in decoded.items()
+            if (key := clean_string(raw_key))
+        }
+    )
+    if not payload.get(ANIMAL_ID_KEY) or not surgery_record_file_token(
+        payload
+    ):
+        return None
+    return payload
+
+
+def discover_surgery_records(page: Any) -> list[SurgeryRecord]:
+    """Return surgery JSON records on a subject page."""
+    records: list[SurgeryRecord] = []
+    for entry in page.entries:
+        if not is_attachment_entry(entry):
+            continue
+        if not attachment_matches_caption(entry, SURGERY_ATTACHMENT_CAPTION):
+            continue
+
+        payload = read_surgery_attachment(entry)
+        if payload is None:
+            continue
+        records.append(
+            SurgeryRecord(
+                page=page,
+                attachment_entry=entry,
+                payload=payload,
+            )
+        )
+
+    return sorted(
+        records,
+        key=lambda record: (
+            clean_string(record.payload.get(SURGERY_DATE_KEY)),
+            clean_string(record.payload.get(SURGERY_DRAFT_ID_KEY)),
+            clean_string(record.payload.get(ANIMAL_ID_KEY)).lower(),
+        ),
+    )
+
+
 def save_surgery_attachment(
     page: Any,
     surgery_payload: Mapping[str, Any],
+    *,
+    existing_entry: Any | None = None,
 ) -> SurgeryWriteResult:
     """Create or update a surgery JSON attachment on a subject page."""
-    animal_id = clean_string(surgery_payload.get(ANIMAL_ID_KEY))
-    surgery_date = clean_string(surgery_payload.get(SURGERY_DATE_KEY))
+    normalized_payload = normalize_surgery_payload(surgery_payload)
+    animal_id = clean_string(normalized_payload.get(ANIMAL_ID_KEY))
+    file_token = surgery_record_file_token(normalized_payload)
     if not animal_id:
-        raise ValueError("animal_id is required.")
-    if not surgery_date:
-        raise ValueError("surgery_date is required.")
+        raise ValueError(f"{ANIMAL_ID_LABEL} is required.")
+    if not file_token:
+        raise ValueError("surgery_date or surgery_draft_id is required.")
 
-    filename = surgery_json_filename(animal_id, surgery_date)
-    existing_entry = find_surgery_attachment(page, filename)
-    if existing_entry is not None:
-        existing_entry.content = _json_attachment_content(
-            surgery_payload,
+    filename = surgery_json_filename(animal_id, file_token)
+    entry_to_update = existing_entry or find_surgery_attachment(page, filename)
+    if entry_to_update is not None:
+        entry_to_update.content = _json_attachment_content(
+            normalized_payload,
             filename=filename,
             caption=SURGERY_ATTACHMENT_CAPTION,
         )
         _sync_json_reference_text_entry(
             page,
-            surgery_payload,
-            attachment_entry=existing_entry,
+            normalized_payload,
+            attachment_entry=entry_to_update,
             caption=SURGERY_ATTACHMENT_CAPTION,
         )
         return SurgeryWriteResult(
             page=page,
-            attachment_entry=existing_entry,
+            attachment_entry=entry_to_update,
             created=False,
         )
 
     attachment_entry, _text_entry = page.entries.create_json_entry(
-        dict(surgery_payload),
+        normalized_payload,
         filename=filename,
         caption=SURGERY_ATTACHMENT_CAPTION,
     )

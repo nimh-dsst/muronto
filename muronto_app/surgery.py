@@ -30,11 +30,21 @@ from muronto_app.config import (
     clean_string,
     normalize_options,
 )
-from muronto_app.subject import ANIMAL_ID_KEY, EAR_TAG_KEY
+from muronto_app.subject import (
+    ANIMAL_ID_KEY,
+    ANIMAL_ID_LABEL,
+    EAR_TAG_KEY,
+    EAR_TAG_LABEL,
+)
 
 SURGERY_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery"
 SURGERY_FILE_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery_attachment"
 
+SURGERY_STATUS_KEY: Final[str] = "surgery_status"
+SURGERY_STATUS_COMPLETE: Final[str] = "complete"
+SURGERY_STATUS_INCOMPLETE: Final[str] = "incomplete"
+SURGERY_VALIDATION_ERRORS_KEY: Final[str] = "validation_errors"
+SURGERY_DRAFT_ID_KEY: Final[str] = "surgery_draft_id"
 SURGEON_KEY: Final[str] = "surgeon"
 SURGERY_DATE_KEY: Final[str] = "surgery_date"
 GENERAL_NOTES_KEY: Final[str] = "general_notes"
@@ -45,13 +55,16 @@ FILENAME_KEY: Final[str] = "filename"
 CAPTION_KEY: Final[str] = "caption"
 MIME_TYPE_KEY: Final[str] = "mime_type"
 PREOP_CNN_KEY: Final[str] = "preop_cnn"
+PREOP_CNN_LABEL: Final[str] = "PreOp Card Cage Number"
 POSTOP_CNN_KEY: Final[str] = "postop_cnn"
+POSTOP_CNN_LABEL: Final[str] = "PostOp Card Cage Number"
 WEIGHT_PRE_G_KEY: Final[str] = "weight_pre_g"
 WEIGHT_POST_G_KEY: Final[str] = "weight_post_g"
 MEDICATIONS_KEY: Final[str] = "medications"
 MEDICATION_KEY: Final[str] = "medication"
 CONC_MGML_KEY: Final[str] = "conc_mgml"
-VOLUME_KEY: Final[str] = "volume"
+VOLUME_KEY: Final[str] = "volume_ml"
+LEGACY_VOLUME_KEY: Final[str] = "volume"
 START_TIME_KEY: Final[str] = "start_time"
 END_TIME_KEY: Final[str] = "end_time"
 BREGMA_LAMBDA_DIST_MM_KEY: Final[str] = "bregma_lambda_dist_mm"
@@ -108,7 +121,11 @@ SURGERY_CATEGORY_OPTIONS: Final[tuple[str, ...]] = (
     IMPLANT_CATEGORY,
 )
 HEMISPHERE_OPTIONS: Final[tuple[str, ...]] = ("LH", "RH")
-POST_INFUSION_FLOW_TEST_OPTIONS: Final[tuple[str, ...]] = ("Pass", "Fail")
+POST_INFUSION_FLOW_TEST_OPTIONS: Final[tuple[str, ...]] = (
+    "Pass",
+    "Fail",
+    "n/a",
+)
 ELECTRODE_TYPE_OPTIONS: Final[tuple[str, ...]] = (
     "NeuroPixels",
     "NeuroNexus",
@@ -139,6 +156,10 @@ STOCK_TITER_PATTERN_TEXT: Final[str] = r"\d_\d\d_\d\d"
 STOCK_TITER_PATTERN: Final[re.Pattern[str]] = re.compile(
     rf"^{STOCK_TITER_PATTERN_TEXT}$"
 )
+SURGERY_TIME_PATTERN_TEXT: Final[str] = r"(?:[01]\d|2[0-3])[0-5]\d"
+SURGERY_TIME_PATTERN: Final[re.Pattern[str]] = re.compile(
+    rf"^{SURGERY_TIME_PATTERN_TEXT}$"
+)
 
 
 class SurgeryValidationError(ValueError):
@@ -159,9 +180,27 @@ def format_surgery_time(value: time) -> str:
     return value.strftime("%H%M")
 
 
+def format_surgery_time_display(value: time) -> str:
+    """Return a surgery time for display as ``HH:MM AM/PM``."""
+    return value.strftime("%I:%M %p").lstrip("0")
+
+
 def surgery_json_filename(animal_id: str, surgery_date: str) -> str:
     """Return the stable JSON filename for a surgery attachment."""
     return f"{animal_id}_surgery_{surgery_date}.json"
+
+
+def surgery_record_file_token(payload: Mapping[str, Any]) -> str:
+    """Return the dated or draft token used in surgery attachment filenames."""
+    surgery_date = clean_string(payload.get(SURGERY_DATE_KEY))
+    if surgery_date:
+        return surgery_date
+
+    draft_id = clean_string(payload.get(SURGERY_DRAFT_ID_KEY))
+    if draft_id:
+        return f"incomplete_{draft_id}"
+
+    return ""
 
 
 def _validate_required(
@@ -195,10 +234,29 @@ def _validate_non_negative_number(
     field_name: str,
     value: object,
     errors: list[str],
-) -> float:
+    allow_incomplete: bool = False,
+) -> float | None:
     if value is None:
         errors.append(f"{field_name} is required.")
-        return 0.0
+        return None if allow_incomplete else 0.0
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        errors.append(f"{field_name} must be a number.")
+        return None if allow_incomplete else 0.0
+
+    numeric_value = float(value)
+    if numeric_value < 0:
+        errors.append(f"{field_name} must be non-negative.")
+    return numeric_value
+
+
+def _validate_optional_non_negative_number(
+    *,
+    field_name: str,
+    value: object,
+    errors: list[str],
+) -> float | None:
+    if value is None:
+        return None
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         errors.append(f"{field_name} must be a number.")
         return 0.0
@@ -214,13 +272,14 @@ def _validate_number(
     field_name: str,
     value: object,
     errors: list[str],
-) -> float:
+    allow_incomplete: bool = False,
+) -> float | None:
     if value is None:
         errors.append(f"{field_name} is required.")
-        return 0.0
+        return None if allow_incomplete else 0.0
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         errors.append(f"{field_name} must be a number.")
-        return 0.0
+        return None if allow_incomplete else 0.0
     return float(value)
 
 
@@ -248,11 +307,43 @@ def _format_time_or_error(
     return format_surgery_time(value)
 
 
+def medication_volume_value(raw_medication: Mapping[str, object]) -> object:
+    """Return the medication volume, accepting the legacy ``volume`` key."""
+    if VOLUME_KEY in raw_medication:
+        return raw_medication.get(VOLUME_KEY)
+    return raw_medication.get(LEGACY_VOLUME_KEY)
+
+
+def normalize_surgery_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a surgery payload with current medication field names."""
+    normalized = dict(payload)
+    raw_medications = normalized.get(MEDICATIONS_KEY)
+    if not isinstance(raw_medications, list):
+        return normalized
+
+    medications: list[Any] = []
+    for raw_medication in raw_medications:
+        if not isinstance(raw_medication, Mapping):
+            medications.append(raw_medication)
+            continue
+
+        medication = dict(raw_medication)
+        if VOLUME_KEY not in medication and LEGACY_VOLUME_KEY in medication:
+            medication[VOLUME_KEY] = medication[LEGACY_VOLUME_KEY]
+        medication.pop(LEGACY_VOLUME_KEY, None)
+        medications.append(medication)
+
+    normalized[MEDICATIONS_KEY] = medications
+    return normalized
+
+
 def _validate_medications(
     raw_medications: Iterable[Mapping[str, object]],
     errors: list[str],
-) -> list[dict[str, str | float]]:
-    medications: list[dict[str, str | float]] = []
+    *,
+    allow_incomplete: bool = False,
+) -> list[dict[str, str | float | None]]:
+    medications: list[dict[str, str | float | None]] = []
 
     for index, raw_medication in enumerate(raw_medications, start=1):
         medication = clean_string(raw_medication.get(MEDICATION_KEY))
@@ -263,11 +354,13 @@ def _validate_medications(
             field_name=f"{CONC_MGML_KEY}_{index}",
             value=raw_medication.get(CONC_MGML_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         volume = _validate_non_negative_number(
             field_name=f"{VOLUME_KEY}_{index}",
-            value=raw_medication.get(VOLUME_KEY),
+            value=medication_volume_value(raw_medication),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         medications.append(
             {
@@ -276,9 +369,6 @@ def _validate_medications(
                 VOLUME_KEY: volume,
             }
         )
-
-    if not medications:
-        errors.append(f"{MEDICATIONS_KEY} must include at least one entry.")
 
     return medications
 
@@ -380,8 +470,9 @@ def _validate_virus_entries(
     *,
     field_prefix: str,
     errors: list[str],
-) -> list[dict[str, str | float]]:
-    viruses: list[dict[str, str | float]] = []
+    allow_incomplete: bool = False,
+) -> list[dict[str, str | float | None]]:
+    viruses: list[dict[str, str | float | None]] = []
     for virus_index, raw_virus in enumerate(
         _raw_list(
             raw_viruses,
@@ -427,6 +518,7 @@ def _validate_virus_entries(
             field_name=f"{field_name}.{INFUSION_RATE_NLMIN_KEY}",
             value=virus_payload.get(INFUSION_RATE_NLMIN_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         viruses.append(
             {
@@ -447,8 +539,9 @@ def _validate_infusion_entries(
     *,
     field_prefix: str,
     errors: list[str],
-) -> list[dict[str, str | float]]:
-    infusions: list[dict[str, str | float]] = []
+    allow_incomplete: bool = False,
+) -> list[dict[str, str | float | None]]:
+    infusions: list[dict[str, str | float | None]] = []
     for infusion_index, raw_infusion in enumerate(
         _raw_list(
             raw_infusions,
@@ -470,21 +563,25 @@ def _validate_infusion_entries(
             field_name=f"{field_name}.{AP_KEY}",
             value=infusion_payload.get(AP_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         ml = _validate_number(
             field_name=f"{field_name}.{ML_KEY}",
             value=infusion_payload.get(ML_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         dv = _validate_number(
             field_name=f"{field_name}.{DV_KEY}",
             value=infusion_payload.get(DV_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         infusion_volume_nl = _validate_non_negative_number(
             field_name=f"{field_name}.{INFUSION_VOLUME_NL_KEY}",
             value=infusion_payload.get(INFUSION_VOLUME_NL_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         post_infusion_flow_test = clean_string(
             infusion_payload.get(POST_INFUSION_FLOW_TEST_KEY)
@@ -513,6 +610,7 @@ def _validate_injection_entries(
     *,
     field_prefix: str,
     errors: list[str],
+    allow_incomplete: bool = False,
 ) -> list[dict[str, object]]:
     injections: list[dict[str, object]] = []
     for injection_index, raw_injection in enumerate(
@@ -554,11 +652,13 @@ def _validate_injection_entries(
                     injection_payload.get(VIRUSES_KEY),
                     field_prefix=field_name,
                     errors=errors,
+                    allow_incomplete=allow_incomplete,
                 ),
                 INFUSIONS_KEY: _validate_infusion_entries(
                     injection_payload.get(INFUSIONS_KEY),
                     field_prefix=field_name,
                     errors=errors,
+                    allow_incomplete=allow_incomplete,
                 ),
             }
         )
@@ -570,7 +670,8 @@ def _validate_cranial_window(
     *,
     field_prefix: str,
     errors: list[str],
-) -> dict[str, str | float]:
+    allow_incomplete: bool = False,
+) -> dict[str, str | float | None]:
     cranial_window = _raw_mapping(
         raw_cranial_window,
         field_name=f"{field_prefix}.{CRANIAL_WINDOW_KEY}",
@@ -605,11 +706,13 @@ def _validate_cranial_window(
         field_name=f"{field_prefix}.{CRANIAL_WINDOW_KEY}.{CENTER_AP_KEY}",
         value=cranial_window.get(CENTER_AP_KEY),
         errors=errors,
+        allow_incomplete=allow_incomplete,
     )
     center_ml = _validate_number(
         field_name=f"{field_prefix}.{CRANIAL_WINDOW_KEY}.{CENTER_ML_KEY}",
         value=cranial_window.get(CENTER_ML_KEY),
         errors=errors,
+        allow_incomplete=allow_incomplete,
     )
     well_type = clean_string(cranial_window.get(WELL_TYPE_KEY))
     if well_type not in WELL_TYPE_OPTIONS:
@@ -636,7 +739,8 @@ def _validate_crystal_skull(
     *,
     field_prefix: str,
     errors: list[str],
-) -> dict[str, str | float]:
+    allow_incomplete: bool = False,
+) -> dict[str, str | float | None]:
     crystal_skull = _raw_mapping(
         raw_crystal_skull,
         field_name=f"{field_prefix}.{CRYSTAL_SKULL_KEY}",
@@ -663,11 +767,13 @@ def _validate_crystal_skull(
         field_name=f"{field_prefix}.{CRYSTAL_SKULL_KEY}.{FRONT_AP_KEY}",
         value=crystal_skull.get(FRONT_AP_KEY),
         errors=errors,
+        allow_incomplete=allow_incomplete,
     )
     left_ml = _validate_number(
         field_name=f"{field_prefix}.{CRYSTAL_SKULL_KEY}.{LEFT_ML_KEY}",
         value=crystal_skull.get(LEFT_ML_KEY),
         errors=errors,
+        allow_incomplete=allow_incomplete,
     )
 
     return {
@@ -684,8 +790,9 @@ def _validate_electrode_entries(
     *,
     field_prefix: str,
     errors: list[str],
-) -> list[dict[str, str | float]]:
-    electrodes: list[dict[str, str | float]] = []
+    allow_incomplete: bool = False,
+) -> list[dict[str, str | float | None]]:
+    electrodes: list[dict[str, str | float | None]] = []
     for electrode_index, raw_electrode in enumerate(
         _raw_list(
             raw_electrodes,
@@ -753,16 +860,19 @@ def _validate_electrode_entries(
             field_name=f"{field_name}.{AP_KEY}",
             value=electrode_payload.get(AP_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         ml = _validate_number(
             field_name=f"{field_name}.{ML_KEY}",
             value=electrode_payload.get(ML_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         dv = _validate_number(
             field_name=f"{field_name}.{DV_KEY}",
             value=electrode_payload.get(DV_KEY),
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         electrodes.append(
             {
@@ -796,6 +906,7 @@ def _validate_implant_procedure(
     field_name: str,
     surgery_category: str,
     errors: list[str],
+    allow_incomplete: bool = False,
 ) -> dict[str, object]:
     implant_type = clean_string(procedure_payload.get(IMPLANT_TYPE_KEY))
     if not implant_type:
@@ -814,6 +925,7 @@ def _validate_implant_procedure(
             procedure_payload.get(CRANIAL_WINDOW_KEY),
             field_prefix=field_name,
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         return procedure
 
@@ -822,6 +934,7 @@ def _validate_implant_procedure(
             procedure_payload.get(CRYSTAL_SKULL_KEY),
             field_prefix=field_name,
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         return procedure
 
@@ -830,6 +943,7 @@ def _validate_implant_procedure(
             procedure_payload.get(ELECTRODES_KEY),
             field_prefix=field_name,
             errors=errors,
+            allow_incomplete=allow_incomplete,
         )
         return procedure
 
@@ -840,6 +954,8 @@ def _validate_implant_procedure(
 def _validate_surgical_procedures(
     raw_procedures: object,
     errors: list[str],
+    *,
+    allow_incomplete: bool = False,
 ) -> list[dict[str, object]]:
     procedures: list[dict[str, object]] = []
     for procedure_index, raw_procedure in enumerate(
@@ -869,6 +985,7 @@ def _validate_surgical_procedures(
                     field_name=field_name,
                     surgery_category=surgery_category,
                     errors=errors,
+                    allow_incomplete=allow_incomplete,
                 )
             )
             continue
@@ -888,6 +1005,7 @@ def _validate_surgical_procedures(
                     procedure_payload.get(INJECTIONS_KEY),
                     field_prefix=field_name,
                     errors=errors,
+                    allow_incomplete=allow_incomplete,
                 ),
             }
         )
@@ -913,6 +1031,8 @@ def build_surgery_payload(
     end_time: time | None,
     bregma_lambda_dist_mm: int | float | None,
     surgical_procedures: object,
+    allow_incomplete: bool = False,
+    draft_id: str = "",
 ) -> dict[str, Any]:
     """Validate form values and return the flat surgery JSON payload."""
     cleaned_project_id = clean_string(project_id)
@@ -923,13 +1043,14 @@ def build_surgery_payload(
     cleaned_preop_cnn = clean_string(preop_cnn)
     cleaned_postop_cnn = clean_string(postop_cnn)
     cleaned_general_notes = clean_string(general_notes)
+    cleaned_draft_id = clean_string(draft_id)
     errors: list[str] = []
 
     for field_name, value in (
         (PROJECT_ID_KEY, cleaned_project_id),
         (INVESTIGATOR_KEY, cleaned_investigator),
-        (ANIMAL_ID_KEY, cleaned_animal_id),
-        (EAR_TAG_KEY, cleaned_ear_tag),
+        (ANIMAL_ID_LABEL, cleaned_animal_id),
+        (EAR_TAG_LABEL, cleaned_ear_tag),
         (SURGEON_KEY, cleaned_surgeon),
     ):
         _validate_required(
@@ -944,12 +1065,12 @@ def build_surgery_payload(
         errors=errors,
     )
     _validate_cnn(
-        field_name=PREOP_CNN_KEY,
+        field_name=PREOP_CNN_LABEL,
         value=cleaned_preop_cnn,
         errors=errors,
     )
     _validate_cnn(
-        field_name=POSTOP_CNN_KEY,
+        field_name=POSTOP_CNN_LABEL,
         value=cleaned_postop_cnn,
         errors=errors,
     )
@@ -973,31 +1094,38 @@ def build_surgery_payload(
         field_name=WEIGHT_PRE_G_KEY,
         value=weight_pre_g,
         errors=errors,
+        allow_incomplete=allow_incomplete,
     )
     cleaned_weight_post_g = _validate_non_negative_number(
         field_name=WEIGHT_POST_G_KEY,
         value=weight_post_g,
         errors=errors,
+        allow_incomplete=allow_incomplete,
     )
-    cleaned_bregma_lambda_dist_mm = _validate_non_negative_number(
+    cleaned_bregma_lambda_dist_mm = _validate_optional_non_negative_number(
         field_name=BREGMA_LAMBDA_DIST_MM_KEY,
         value=bregma_lambda_dist_mm,
         errors=errors,
     )
-    cleaned_medications = _validate_medications(medications, errors)
+    cleaned_medications = _validate_medications(
+        medications,
+        errors,
+        allow_incomplete=allow_incomplete,
+    )
     cleaned_surgical_procedures = _validate_surgical_procedures(
         surgical_procedures,
         errors,
+        allow_incomplete=allow_incomplete,
     )
     cleaned_attachments = _validate_attachment_references(
         attachments,
         errors,
     )
 
-    if errors:
+    if errors and not allow_incomplete:
         raise SurgeryValidationError(errors)
 
-    return {
+    payload: dict[str, Any] = {
         PROJECT_ID_KEY: cleaned_project_id,
         "investigator": cleaned_investigator,
         ANIMAL_ID_KEY: cleaned_animal_id,
@@ -1016,6 +1144,17 @@ def build_surgery_payload(
         BREGMA_LAMBDA_DIST_MM_KEY: cleaned_bregma_lambda_dist_mm,
         SURGICAL_PROCEDURES_KEY: cleaned_surgical_procedures,
     }
+
+    if not allow_incomplete:
+        return payload
+
+    payload[SURGERY_STATUS_KEY] = (
+        SURGERY_STATUS_INCOMPLETE if errors else SURGERY_STATUS_COMPLETE
+    )
+    payload[SURGERY_VALIDATION_ERRORS_KEY] = list(errors)
+    if errors and cleaned_draft_id and not formatted_surgery_date:
+        payload[SURGERY_DRAFT_ID_KEY] = cleaned_draft_id
+    return payload
 
 
 def medication_names(payload: Mapping[str, Any]) -> list[str]:

@@ -25,6 +25,7 @@ from muronto_app.config import (
 )
 from muronto_app.surgery import (
     ATTACHMENTS_KEY,
+    BREGMA_LAMBDA_DIST_MM_KEY,
     CAPTION_KEY,
     CRANIAL_WINDOW_IMPLANT_TYPE,
     CRYSTAL_SKULL_IMPLANT_TYPE,
@@ -36,16 +37,24 @@ from muronto_app.surgery import (
     IMPLANT_CATEGORY,
     MIME_TYPE_KEY,
     NOTE_UPLOAD_TYPE,
+    SURGERY_DRAFT_ID_KEY,
     SURGERY_FILE_ATTACHMENT_CAPTION,
+    SURGERY_STATUS_INCOMPLETE,
+    SURGERY_STATUS_KEY,
+    SURGERY_TIME_PATTERN,
+    SURGERY_TIME_PATTERN_TEXT,
+    SURGERY_VALIDATION_ERRORS_KEY,
     UPLOAD_TYPE_KEY,
     VIRAL_INJECTION_CATEGORY,
     SurgeryValidationError,
     build_surgery_payload,
     format_surgery_date,
     format_surgery_time,
+    format_surgery_time_display,
     medication_names,
     procedure_option_values,
     surgery_json_filename,
+    surgery_record_file_token,
     with_surgeon_options,
     with_surgery_options,
 )
@@ -154,7 +163,7 @@ def valid_surgery_kwargs() -> dict[str, Any]:
         "weight_pre_g": 25.1,
         "weight_post_g": 24.8,
         "medications": [
-            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
         ],
         "start_time": time(9, 0),
         "end_time": time(14, 0),
@@ -169,6 +178,33 @@ def test_format_surgery_date_uses_yyyymmdd() -> None:
 
 def test_format_surgery_time_uses_hhmm_with_leading_zeroes() -> None:
     assert format_surgery_time(time(9, 5)) == "0905"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(time(9, 5), "9:05 AM"), (time(14, 30), "2:30 PM")],
+)
+def test_format_surgery_time_display_uses_12_hour_clock(
+    value: time,
+    expected: str,
+) -> None:
+    assert format_surgery_time_display(value) == expected
+
+
+@pytest.mark.parametrize("value", ["0000", "0905", "1200", "2359"])
+def test_surgery_time_pattern_accepts_four_digit_24_hour_times(
+    value: str,
+) -> None:
+    assert SURGERY_TIME_PATTERN.fullmatch(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["900", "126", "12:00", "2360", "2400", "9999", "abcd"],
+)
+def test_surgery_time_pattern_rejects_non_hhmm_times(value: str) -> None:
+    assert not SURGERY_TIME_PATTERN.fullmatch(value)
+    assert SURGERY_TIME_PATTERN_TEXT == r"(?:[01]\d|2[0-3])[0-5]\d"
 
 
 def test_surgery_json_filename_uses_animal_id_and_date() -> None:
@@ -195,13 +231,43 @@ def test_build_surgery_payload_formats_date_and_values() -> None:
         "weight_pre_g": 25.1,
         "weight_post_g": 24.8,
         "medications": [
-            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
         ],
         "start_time": "0900",
         "end_time": "1400",
         "bregma_lambda_dist_mm": 4.2,
         "surgical_procedures": [valid_viral_procedure()],
     }
+
+
+def test_build_surgery_payload_allows_null_bregma_lambda_distance() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["bregma_lambda_dist_mm"] = None
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload[BREGMA_LAMBDA_DIST_MM_KEY] is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_error"),
+    [
+        (-0.1, "bregma_lambda_dist_mm must be non-negative."),
+        ("4.2", "bregma_lambda_dist_mm must be a number."),
+        (True, "bregma_lambda_dist_mm must be a number."),
+    ],
+)
+def test_build_surgery_payload_validates_provided_bregma_lambda_distance(
+    value: object,
+    expected_error: str,
+) -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["bregma_lambda_dist_mm"] = value
+
+    with pytest.raises(SurgeryValidationError) as exc_info:
+        build_surgery_payload(**kwargs)
+
+    assert expected_error in exc_info.value.errors
 
 
 def test_build_surgery_payload_supports_general_notes() -> None:
@@ -442,20 +508,57 @@ def test_build_surgery_payload_supports_multiple_viruses() -> None:
     )
 
 
+def test_build_surgery_payload_supports_not_applicable_flow_test() -> None:
+    kwargs = valid_surgery_kwargs()
+    procedure = valid_viral_procedure()
+    injection = procedure["injections"][0]  # type: ignore[index]
+    infusion = injection["infusions"][0]  # type: ignore[index]
+    infusion["post_infusion_flow_test"] = "n/a"  # type: ignore[index]
+    kwargs["surgical_procedures"] = [procedure]
+
+    payload = build_surgery_payload(**kwargs)
+
+    payload_infusion = payload["surgical_procedures"][0]["injections"][0][
+        "infusions"
+    ][0]
+    assert payload_infusion["post_infusion_flow_test"] == "n/a"
+
+
 def test_build_surgery_payload_supports_multiple_medications() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["medications"] = [
-        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1},
-        {"medication": "Dexamethasone", "conc_mgml": 2.0, "volume": 0.05},
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1},
+        {
+            "medication": "Dexamethasone",
+            "conc_mgml": 2.0,
+            "volume_ml": 0.05,
+        },
     ]
 
     payload = build_surgery_payload(**kwargs)
 
     assert payload["medications"] == [
-        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1},
-        {"medication": "Dexamethasone", "conc_mgml": 2.0, "volume": 0.05},
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1},
+        {
+            "medication": "Dexamethasone",
+            "conc_mgml": 2.0,
+            "volume_ml": 0.05,
+        },
     ]
     assert medication_names(payload) == ["Meloxicam", "Dexamethasone"]
+
+
+def test_build_surgery_payload_accepts_legacy_medication_volume_key() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["medications"] = [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+    ]
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload["medications"] == [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
+    ]
 
 
 def test_build_surgery_payload_validates_cnn_patterns() -> None:
@@ -467,10 +570,12 @@ def test_build_surgery_payload_validates_cnn_patterns() -> None:
         build_surgery_payload(**kwargs)
 
     assert any(
-        "preop_cnn must match" in error for error in exc_info.value.errors
+        "PreOp Card Cage Number must match" in error
+        for error in exc_info.value.errors
     )
     assert any(
-        "postop_cnn must match" in error for error in exc_info.value.errors
+        "PostOp Card Cage Number must match" in error
+        for error in exc_info.value.errors
     )
 
 
@@ -482,6 +587,34 @@ def test_build_surgery_payload_requires_date() -> None:
         build_surgery_payload(**kwargs)
 
     assert "surgery_date must be selected." in exc_info.value.errors
+
+
+def test_build_surgery_payload_can_mark_incomplete_draft() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["surgery_date"] = None
+    kwargs["preop_cnn"] = ""
+    kwargs["weight_pre_g"] = None
+
+    payload = build_surgery_payload(
+        **kwargs,
+        allow_incomplete=True,
+        draft_id="draft123",
+    )
+
+    assert payload[SURGERY_STATUS_KEY] == SURGERY_STATUS_INCOMPLETE
+    assert payload[SURGERY_DRAFT_ID_KEY] == "draft123"
+    assert payload["surgery_date"] == ""
+    assert payload["preop_cnn"] == ""
+    assert payload["weight_pre_g"] is None
+    assert (
+        "surgery_date must be selected."
+        in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    )
+    assert (
+        "PreOp Card Cage Number is required."
+        in payload[SURGERY_VALIDATION_ERRORS_KEY]
+    )
+    assert surgery_record_file_token(payload) == "incomplete_draft123"
 
 
 def test_build_surgery_payload_requires_perioperative_fields() -> None:
@@ -496,14 +629,21 @@ def test_build_surgery_payload_requires_perioperative_fields() -> None:
     with pytest.raises(SurgeryValidationError) as exc_info:
         build_surgery_payload(**kwargs)
 
-    assert "weight_pre_g is required." in exc_info.value.errors
-    assert "weight_post_g is required." in exc_info.value.errors
-    assert "start_time must be selected." in exc_info.value.errors
-    assert "end_time must be selected." in exc_info.value.errors
-    assert "bregma_lambda_dist_mm is required." in exc_info.value.errors
-    assert (
-        "medications must include at least one entry." in exc_info.value.errors
-    )
+    errors = exc_info.value.errors
+    assert "weight_pre_g is required." in errors
+    assert "weight_post_g is required." in errors
+    assert "start_time must be selected." in errors
+    assert "end_time must be selected." in errors
+    assert "bregma_lambda_dist_mm is required." not in errors
+
+
+def test_build_surgery_payload_supports_empty_medications() -> None:
+    kwargs = valid_surgery_kwargs()
+    kwargs["medications"] = []
+
+    payload = build_surgery_payload(**kwargs)
+
+    assert payload["medications"] == []
 
 
 def test_build_surgery_payload_requires_surgical_procedures() -> None:
@@ -762,7 +902,7 @@ def test_build_surgery_payload_validates_stock_titer_pattern() -> None:
 def test_build_surgery_payload_validates_medication_rows() -> None:
     kwargs = valid_surgery_kwargs()
     kwargs["medications"] = [
-        {"medication": "", "conc_mgml": None, "volume": -1}
+        {"medication": "", "conc_mgml": None, "volume_ml": -1}
     ]
 
     with pytest.raises(SurgeryValidationError) as exc_info:
@@ -770,7 +910,7 @@ def test_build_surgery_payload_validates_medication_rows() -> None:
 
     assert "medication_1 is required." in exc_info.value.errors
     assert "conc_mgml_1 is required." in exc_info.value.errors
-    assert "volume_1 must be non-negative." in exc_info.value.errors
+    assert "volume_ml_1 must be non-negative." in exc_info.value.errors
 
 
 def test_build_surgery_payload_validates_attachment_references() -> None:

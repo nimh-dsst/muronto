@@ -18,16 +18,31 @@ from muronto_app.config import (
 )
 
 ANIMAL_ID_KEY: Final[str] = "animal_id"
+ANIMAL_ID_LABEL: Final[str] = "Animal ID"
 EAR_TAG_KEY: Final[str] = "ear_tag"
+EAR_TAG_LABEL: Final[str] = "Ear Tag"
 CCN_KEY: Final[str] = "ccn"
+CCN_LABEL: Final[str] = "Card Cage Number"
 SEX_KEY: Final[str] = "sex"
+SEX_LABEL: Final[str] = "Sex"
 GENOTYPE_KEY: Final[str] = "genotype"
+GENOTYPE_LABEL: Final[str] = "Genotype"
+STRAIN_LABEL: Final[str] = "Strain"
 DOB_KEY: Final[str] = "dob"
+DOB_LABEL: Final[str] = "DOB"
 DOW_KEY: Final[str] = "dow"
+DOW_LABEL: Final[str] = "DOW"
 SOURCE_TYPE_KEY: Final[str] = SOURCE_TYPE_OPTIONS_KEY
+SOURCE_TYPE_LABEL: Final[str] = "Source Type"
 PARENT_CCN_KEY: Final[str] = "parent_ccn"
+PARENT_CCN_LABEL: Final[str] = "Parent Cage Card Number"
 
 SUBJECT_ATTACHMENT_CAPTION: Final[str] = "muronto_subject"
+
+SUBJECT_STATUS_KEY: Final[str] = "subject_status"
+SUBJECT_STATUS_COMPLETE: Final[str] = "complete"
+SUBJECT_STATUS_INCOMPLETE: Final[str] = "incomplete"
+SUBJECT_VALIDATION_ERRORS_KEY: Final[str] = "validation_errors"
 
 ANIMAL_ID_PATTERN_TEXT: Final[str] = r"\d\d\d-\d\d\d\d"
 EAR_TAG_PATTERN_TEXT: Final[str] = r"\d\d\d"
@@ -57,6 +72,13 @@ class SubjectValidationError(ValueError):
 def subject_json_filename(animal_id: str) -> str:
     """Return the stable JSON filename for a subject page attachment."""
     return f"{animal_id}.json"
+
+
+def is_subject_incomplete(payload: Mapping[str, Any]) -> bool:
+    """Return whether a subject payload is marked as incomplete."""
+    return clean_string(payload.get(SUBJECT_STATUS_KEY)) == (
+        SUBJECT_STATUS_INCOMPLETE
+    )
 
 
 def format_subject_date(value: date) -> str:
@@ -124,7 +146,8 @@ def build_subject_payload(
     dow: date | None,
     source_type: str,
     parent_ccn: str = "",
-) -> dict[str, str]:
+    allow_incomplete: bool = False,
+) -> dict[str, Any]:
     """Validate form values and return the flat subject JSON payload."""
     cleaned_animal_id = clean_string(animal_id)
     cleaned_ear_tag = clean_string(ear_tag)
@@ -132,18 +155,19 @@ def build_subject_payload(
     cleaned_sex = clean_string(sex)
     cleaned_source_type = clean_string(source_type)
     cleaned_parent_ccn = clean_string(parent_ccn)
+    animal_id_errors: list[str] = []
     errors: list[str] = []
 
     _validate_pattern(
-        field_name=ANIMAL_ID_KEY,
+        field_name=ANIMAL_ID_LABEL,
         value=cleaned_animal_id,
         pattern=ANIMAL_ID_PATTERN,
         pattern_text=ANIMAL_ID_PATTERN_TEXT,
         example="123-4567",
-        errors=errors,
+        errors=animal_id_errors,
     )
     _validate_pattern(
-        field_name=EAR_TAG_KEY,
+        field_name=EAR_TAG_LABEL,
         value=cleaned_ear_tag,
         pattern=EAR_TAG_PATTERN,
         pattern_text=EAR_TAG_PATTERN_TEXT,
@@ -151,7 +175,7 @@ def build_subject_payload(
         errors=errors,
     )
     _validate_pattern(
-        field_name=CCN_KEY,
+        field_name=CCN_LABEL,
         value=cleaned_ccn,
         pattern=CCN_PATTERN,
         pattern_text=CCN_PATTERN_TEXT,
@@ -160,24 +184,24 @@ def build_subject_payload(
     )
 
     if not cleaned_sex:
-        errors.append(f"{SEX_KEY} is required.")
+        errors.append(f"{SEX_LABEL} is required.")
     elif cleaned_sex not in SEX_OPTIONS:
         errors.append(
-            f"{SEX_KEY} must be one of " + ", ".join(SEX_OPTIONS) + "."
+            f"{SEX_LABEL} must be one of " + ", ".join(SEX_OPTIONS) + "."
         )
 
     if not cleaned_source_type:
-        errors.append(f"{SOURCE_TYPE_KEY} is required.")
+        errors.append(f"{SOURCE_TYPE_LABEL} is required.")
 
     _validate_optional_ccn(
-        field_name=PARENT_CCN_KEY,
+        field_name=PARENT_CCN_LABEL,
         value=cleaned_parent_ccn,
         required=cleaned_source_type == PARENT_REQUIRED_SOURCE_TYPE,
         errors=errors,
     )
 
     if not strain_genotypes:
-        errors.append("At least one strain/genotype pair is required.")
+        errors.append("At least one Strain/Genotype pair is required.")
 
     cleaned_pairs: list[tuple[str, str]] = []
     for index, (raw_strain, raw_genotype) in enumerate(
@@ -187,32 +211,38 @@ def build_subject_payload(
         strain = clean_string(raw_strain)
         genotype = clean_string(raw_genotype)
         if not strain:
-            errors.append(f"{STRAIN_OPTIONS_KEY}_{index} is required.")
+            errors.append(f"{STRAIN_LABEL} {index} is required.")
         if not genotype:
-            errors.append(f"{GENOTYPE_KEY}_{index} is required.")
+            errors.append(f"{GENOTYPE_LABEL} {index} is required.")
         elif genotype not in GENOTYPE_OPTIONS:
             errors.append(
-                f"{GENOTYPE_KEY}_{index} must be one of "
+                f"{GENOTYPE_LABEL} {index} must be one of "
                 + ", ".join(GENOTYPE_OPTIONS)
                 + "."
             )
         cleaned_pairs.append((strain, genotype))
 
     formatted_dob = _format_date_or_error(
-        field_name=DOB_KEY,
+        field_name=DOB_LABEL,
         value=dob,
         errors=errors,
     )
     formatted_dow = _format_date_or_error(
-        field_name=DOW_KEY,
+        field_name=DOW_LABEL,
         value=dow,
         errors=errors,
     )
 
-    if errors:
-        raise SubjectValidationError(errors)
+    if animal_id_errors:
+        if allow_incomplete:
+            raise SubjectValidationError(animal_id_errors)
+        raise SubjectValidationError([*animal_id_errors, *errors])
 
-    payload = {
+    if errors:
+        if not allow_incomplete:
+            raise SubjectValidationError(errors)
+
+    payload: dict[str, Any] = {
         ANIMAL_ID_KEY: cleaned_animal_id,
         EAR_TAG_KEY: cleaned_ear_tag,
         CCN_KEY: cleaned_ccn,
@@ -226,15 +256,18 @@ def build_subject_payload(
     payload[DOW_KEY] = formatted_dow
     payload[SOURCE_TYPE_KEY] = cleaned_source_type
     payload[PARENT_CCN_KEY] = cleaned_parent_ccn
+    if errors:
+        payload[SUBJECT_STATUS_KEY] = SUBJECT_STATUS_INCOMPLETE
+        payload[SUBJECT_VALIDATION_ERRORS_KEY] = list(errors)
     return payload
 
 
-def subject_strains(payload: Mapping[str, str]) -> list[str]:
+def subject_strains(payload: Mapping[str, Any]) -> list[str]:
     """Return strain values from a flat subject payload in suffix order."""
     strains: list[str] = []
     index = 1
     while f"{STRAIN_OPTIONS_KEY}_{index}" in payload:
-        strains.append(payload[f"{STRAIN_OPTIONS_KEY}_{index}"])
+        strains.append(clean_string(payload[f"{STRAIN_OPTIONS_KEY}_{index}"]))
         index += 1
     return strains
 

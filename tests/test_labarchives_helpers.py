@@ -27,11 +27,13 @@ from muronto_app.labarchives import (
     attachment_matches_config,
     create_subject_page_with_json,
     discover_subject_records,
+    discover_surgery_records,
     find_config_attachment,
     find_root_config_page,
     read_config_attachment,
     resolve_notebook_folder,
     save_config_attachment,
+    save_subject_attachment,
     save_surgery_attachment,
     save_surgery_file_attachment,
 )
@@ -47,7 +49,10 @@ from muronto_app.surgery import (
     MIME_TYPE_KEY,
     NOTE_UPLOAD_TYPE,
     SURGERY_ATTACHMENT_CAPTION,
+    SURGERY_DRAFT_ID_KEY,
     SURGERY_FILE_ATTACHMENT_CAPTION,
+    SURGERY_STATUS_INCOMPLETE,
+    SURGERY_STATUS_KEY,
     UPLOAD_TYPE_KEY,
 )
 
@@ -438,6 +443,59 @@ def test_discover_subject_records_recurses_folders() -> None:
     assert nested_folder.refreshed == 1
 
 
+def test_save_subject_attachment_updates_entry_and_text() -> None:
+    entry = FakeEntry(
+        {
+            "animal_id": "123-4567",
+            "ear_tag": "123",
+            "ccn": "123456",
+            "sex": "M",
+            "strain_1": "Ai14",
+            "genotype_1": "Het",
+            "dob": "20240102",
+            "dow": "20240109",
+            "source_type": "JAX",
+            "parent_ccn": "",
+        },
+        filename="123-4567.json",
+        caption=SUBJECT_ATTACHMENT_CAPTION,
+        entry_id="subject-entry",
+    )
+    text_entry = FakeTextEntry(
+        "<p>Reference Attachment: muronto_subject</p>"
+        "<p>Entry ID: subject-entry</p>"
+        "<pre>old preview</pre>"
+    )
+    page = FakePage([entry, text_entry], name="123-4567")
+    payload = {
+        "animal_id": "765-4321",
+        "ear_tag": "456",
+        "ccn": "654321",
+        "sex": "F",
+        "strain_1": "Ai14",
+        "genotype_1": "WT",
+        "dob": "20240203",
+        "dow": "20240210",
+        "source_type": "Breeding",
+        "parent_ccn": "123456",
+    }
+
+    result = save_subject_attachment(page, payload)
+
+    assert result.attachment_entry is entry
+    assert len(page.entries) == 2
+    assert entry.updated_content is not None
+    assert entry.updated_content.filename == "765-4321.json"
+    assert entry.updated_content.caption == SUBJECT_ATTACHMENT_CAPTION
+    assert text_entry.updated_content is not None
+    assert (
+        "Reference Attachment: muronto_subject" in text_entry.updated_content
+    )
+    assert "Entry ID: subject-entry" in text_entry.updated_content
+    assert "765-4321" in text_entry.updated_content
+    assert "old preview" not in text_entry.updated_content
+
+
 def test_save_surgery_attachment_creates_and_updates_by_filename() -> None:
     page = FakePage([], name="123-4567")
     payload = {
@@ -475,6 +533,25 @@ def test_save_surgery_attachment_creates_and_updates_by_filename() -> None:
     assert (
         page.entries[0].updated_content.caption == SURGERY_ATTACHMENT_CAPTION
     )
+
+
+def test_save_surgery_attachment_writes_current_volume_key() -> None:
+    page = FakePage([], name="123-4567")
+    payload = {
+        "animal_id": "123-4567",
+        "surgery_date": "20260511",
+        "medications": [
+            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+        ],
+    }
+
+    save_surgery_attachment(page, payload)
+
+    assert page.entries.created is not None
+    created_payload = page.entries.created[0]
+    assert created_payload["medications"] == [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
+    ]
 
 
 def test_save_surgery_attachment_updates_reference_text_entry() -> None:
@@ -520,6 +597,141 @@ def test_save_surgery_attachment_updates_reference_text_entry() -> None:
     assert SURGERY_ATTACHMENT_CAPTION in text_entry.updated_content
     assert "Entry ID: surgery-entry" in text_entry.updated_content
     assert "JGL" in text_entry.updated_content
+    assert "old preview" not in text_entry.updated_content
+
+
+def test_discover_surgery_records_on_subject_page() -> None:
+    surgery_payload = {
+        "project_id": "SEASIC",
+        "investigator": "APF",
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "surgeon": "SL",
+        "surgery_date": "20260511",
+        "general_notes": "baseline",
+        "medications": [
+            {"medication": "Meloxicam", "conc_mgml": 5.0, "volume": 0.1}
+        ],
+    }
+    page = FakePage(
+        [
+            FakeEntry(
+                surgery_payload,
+                filename="123-4567_surgery_20260511.json",
+                caption=SURGERY_ATTACHMENT_CAPTION,
+            )
+        ],
+        name="123-4567",
+    )
+
+    records = discover_surgery_records(page)
+
+    assert len(records) == 1
+    assert records[0].page is page
+    assert records[0].attachment_entry is page.entries[0]
+    assert records[0].payload["surgery_date"] == "20260511"
+    assert records[0].payload["general_notes"] == "baseline"
+    assert records[0].payload["medications"] == [
+        {"medication": "Meloxicam", "conc_mgml": 5.0, "volume_ml": 0.1}
+    ]
+
+
+def test_discover_surgery_records_includes_incomplete_drafts() -> None:
+    surgery_payload = {
+        "project_id": "SEASIC",
+        "investigator": "APF",
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "surgeon": "",
+        "surgery_date": "",
+        SURGERY_DRAFT_ID_KEY: "draft123",
+        SURGERY_STATUS_KEY: SURGERY_STATUS_INCOMPLETE,
+    }
+    page = FakePage(
+        [
+            FakeEntry(
+                surgery_payload,
+                filename="123-4567_surgery_incomplete_draft123.json",
+                caption=SURGERY_ATTACHMENT_CAPTION,
+            )
+        ],
+        name="123-4567",
+    )
+
+    records = discover_surgery_records(page)
+
+    assert len(records) == 1
+    assert records[0].payload[SURGERY_DRAFT_ID_KEY] == "draft123"
+
+
+def test_save_surgery_attachment_creates_draft_without_date() -> None:
+    page = FakePage([], name="123-4567")
+    payload = {
+        "project_id": "SEASIC",
+        "investigator": "APF",
+        "animal_id": "123-4567",
+        "ear_tag": "123",
+        "surgeon": "",
+        "surgery_date": "",
+        SURGERY_DRAFT_ID_KEY: "draft123",
+        SURGERY_STATUS_KEY: SURGERY_STATUS_INCOMPLETE,
+    }
+
+    created = save_surgery_attachment(page, payload)
+
+    assert created.created
+    assert page.entries.created == (
+        payload,
+        "123-4567_surgery_incomplete_draft123.json",
+        SURGERY_ATTACHMENT_CAPTION,
+    )
+
+
+def test_save_surgery_attachment_overwrites_selected_entry() -> None:
+    entry = FakeEntry(
+        {
+            "project_id": "SEASIC",
+            "investigator": "APF",
+            "animal_id": "123-4567",
+            "ear_tag": "123",
+            "surgeon": "SL",
+            "surgery_date": "20260511",
+            "preop_cnn": "123456",
+            "postop_cnn": "654321",
+        },
+        filename="123-4567_surgery_20260511.json",
+        caption=SURGERY_ATTACHMENT_CAPTION,
+        entry_id="surgery-entry",
+    )
+    text_entry = FakeTextEntry(
+        "<p>Reference Attachment: surgery</p>"
+        "<p>Entry ID: surgery-entry</p>"
+        "<pre>old preview 20260511</pre>"
+    )
+    page = FakePage([entry, text_entry], name="123-4567")
+
+    result = save_surgery_attachment(
+        page,
+        {
+            "project_id": "SEASIC",
+            "investigator": "APF",
+            "animal_id": "123-4567",
+            "ear_tag": "123",
+            "surgeon": "JGL",
+            "surgery_date": "20260512",
+            "preop_cnn": "123456",
+            "postop_cnn": "654321",
+        },
+        existing_entry=entry,
+    )
+
+    assert not result.created
+    assert result.attachment_entry is entry
+    assert len(page.entries) == 2
+    assert entry.updated_content is not None
+    assert entry.updated_content.filename == "123-4567_surgery_20260512.json"
+    assert text_entry.updated_content is not None
+    assert "20260512" in text_entry.updated_content
     assert "old preview" not in text_entry.updated_content
 
 
