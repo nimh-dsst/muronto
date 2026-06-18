@@ -37,16 +37,16 @@ from muronto_app.subject import (
     EAR_TAG_LABEL,
 )
 
-SURGERY_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery"
-SURGERY_FILE_ATTACHMENT_CAPTION: Final[str] = "muronto_surgery_attachment"
+INVIVO2P_ATTACHMENT_CAPTION: Final[str] = "muronto_invivo2p"
+INVIVO2P_FILE_ATTACHMENT_CAPTION: Final[str] = "muronto_invivo2p_attachment"
 
-SURGERY_STATUS_KEY: Final[str] = "surgery_status"
-SURGERY_STATUS_COMPLETE: Final[str] = "complete"
-SURGERY_STATUS_INCOMPLETE: Final[str] = "incomplete"
-SURGERY_VALIDATION_ERRORS_KEY: Final[str] = "validation_errors"
-SURGERY_DRAFT_ID_KEY: Final[str] = "surgery_draft_id"
-SURGEON_KEY: Final[str] = "surgeon"
-SURGERY_DATE_KEY: Final[str] = "surgery_date"
+INVIVO2P_STATUS_KEY: Final[str] = "invivo2p_status"
+INVIVO2P_STATUS_COMPLETE: Final[str] = "complete"
+INVIVO2P_STATUS_INCOMPLETE: Final[str] = "incomplete"
+INVIVO2P_VALIDATION_ERRORS_KEY: Final[str] = "validation_errors"
+INVIVO2P_DRAFT_ID_KEY: Final[str] = "invivo2p_draft_id"
+IMAGER_KEY: Final[str] = "imager"
+INVIVO2P_DATE_KEY: Final[str] = "invivo2p_date"
 GENERAL_NOTES_KEY: Final[str] = "general_notes"
 ATTACHMENTS_KEY: Final[str] = "attachments"
 UPLOAD_TYPE_KEY: Final[str] = "upload_type"
@@ -54,72 +54,156 @@ ENTRY_ID_KEY: Final[str] = "entry_id"
 FILENAME_KEY: Final[str] = "filename"
 CAPTION_KEY: Final[str] = "caption"
 MIME_TYPE_KEY: Final[str] = "mime_type"
-PREOP_CNN_KEY: Final[str] = "preop_cnn"
-PREOP_CNN_LABEL: Final[str] = "PreOp Card Cage Number"
-POSTOP_CNN_KEY: Final[str] = "postop_cnn"
-POSTOP_CNN_LABEL: Final[str] = "PostOp Card Cage Number"
-WEIGHT_PRE_G_KEY: Final[str] = "weight_pre_g"
-WEIGHT_POST_G_KEY: Final[str] = "weight_post_g"
-MEDICATIONS_KEY: Final[str] = "medications"
-MEDICATION_KEY: Final[str] = "medication"
-CONC_MGML_KEY: Final[str] = "conc_mgml"
-VOLUME_KEY: Final[str] = "volume_ml"
-LEGACY_VOLUME_KEY: Final[str] = "volume"
-START_TIME_KEY: Final[str] = "start_time"
-END_TIME_KEY: Final[str] = "end_time"
-BREGMA_LAMBDA_DIST_MM_KEY: Final[str] = "bregma_lambda_dist_mm"
-SURGICAL_PROCEDURES_KEY: Final[str] = "surgical_procedures"
-SURGERY_CATEGORY_KEY: Final[str] = "surgery_category"
-INJECTIONS_KEY: Final[str] = "injections"
-SITE_KEY: Final[str] = "site"
-HEMISPHERE_KEY: Final[str] = "hemisphere"
-VIRUSES_KEY: Final[str] = "viruses"
-VIRUS_KEY: Final[str] = "virus"
-VIRUS_SOURCE_KEY: Final[str] = "virus_source"
-VIRUS_ID_KEY: Final[str] = "virus_id"
-VIRUS_STOCK_KEY: Final[str] = "virus_stock"
-STOCK_TITER_KEY: Final[str] = "stock_titer"
-DILUTION_KEY: Final[str] = "dilution"
-INFUSION_RATE_NLMIN_KEY: Final[str] = "infusion_rate_nlmin"
-INFUSIONS_KEY: Final[str] = "infusions"
-AP_KEY: Final[str] = "ap"
-ML_KEY: Final[str] = "ml"
-DV_KEY: Final[str] = "dv"
-INFUSION_VOLUME_NL_KEY: Final[str] = "infusion_volume_nl"
-POST_INFUSION_FLOW_TEST_KEY: Final[str] = "post_infusion_flow_test"
-NOTES_KEY: Final[str] = "notes"
-IMPLANT_TYPE_KEY: Final[str] = "implant_type"
-CRANIAL_WINDOW_KEY: Final[str] = "cranial_window"
-CRYSTAL_SKULL_KEY: Final[str] = "crystal_skull"
-HEADPLATE_TYPE_KEY: Final[str] = "headplate_type"
-CS_TYPE_KEY: Final[str] = "cs_type"
-COVERSLIP_TYPE_KEY: Final[str] = "coverslip_type"
-COVERSLIP_DIAMETER_KEY: Final[str] = "coverslip_diameter"
-COVERSLIP_THICKNESS_KEY: Final[str] = "coverslip_thickness"
-REGION_KEY: Final[str] = "region"
-CENTER_AP_KEY: Final[str] = "center_ap"
-CENTER_ML_KEY: Final[str] = "center_ml"
-FRONT_AP_KEY: Final[str] = "front_ap"
-LEFT_ML_KEY: Final[str] = "left_ml"
-WELL_TYPE_KEY: Final[str] = "well_type"
-ELECTRODES_KEY: Final[str] = "electrodes"
-ELECTRODE_TYPE_KEY: Final[str] = "electrode_type"
-PROBE_MODEL_KEY: Final[str] = "probe_model"
-PROBE_ID_KEY: Final[str] = "probe_id"
-ELECTRODE_SITE_KEY: Final[str] = "electrode_site"
-ELECTRODE_HEMISPHERE_KEY: Final[str] = "electrode_hemisphere"
-PITCH_KEY: Final[str] = "pitch"
-YAW_KEY: Final[str] = "yaw"
-ROLL_KEY: Final[str] = "roll"
-GROUND_KEY: Final[str] = "ground"
-REFERENCE_KEY: Final[str] = "reference"
 
-VIRAL_INJECTION_CATEGORY: Final[str] = "Viral Injection"
-IMPLANT_CATEGORY: Final[str] = "Implant"
-SURGERY_CATEGORY_OPTIONS: Final[tuple[str, ...]] = (
-    VIRAL_INJECTION_CATEGORY,
-    IMPLANT_CATEGORY,
+
+
+
+# PREOP_CNN_KEY: Final[str] = "preop_cnn"
+# PREOP_CNN_LABEL: Final[str] = "PreOp Card Cage Number"
+# POSTOP_CNN_KEY: Final[str] = "postop_cnn"
+# POSTOP_CNN_LABEL: Final[str] = "PostOp Card Cage Number"
+# WEIGHT_PRE_G_KEY: Final[str] = "weight_pre_g"
+# WEIGHT_POST_G_KEY: Final[str] = "weight_post_g"
+# MEDICATIONS_KEY: Final[str] = "medications"
+# MEDICATION_KEY: Final[str] = "medication"
+# CONC_MGML_KEY: Final[str] = "conc_mgml"
+# VOLUME_KEY: Final[str] = "volume_ml"
+# LEGACY_VOLUME_KEY: Final[str] = "volume"
+# START_TIME_KEY: Final[str] = "start_time"
+# END_TIME_KEY: Final[str] = "end_time"
+# BREGMA_LAMBDA_DIST_MM_KEY: Final[str] = "bregma_lambda_dist_mm"
+# SURGICAL_PROCEDURES_KEY: Final[str] = "surgical_procedures"
+# SURGERY_CATEGORY_KEY: Final[str] = "surgery_category"
+# INJECTIONS_KEY: Final[str] = "injections"
+# SITE_KEY: Final[str] = "site"
+# HEMISPHERE_KEY: Final[str] = "hemisphere"
+# VIRUSES_KEY: Final[str] = "viruses"
+# VIRUS_KEY: Final[str] = "virus"
+# VIRUS_SOURCE_KEY: Final[str] = "virus_source"
+# VIRUS_ID_KEY: Final[str] = "virus_id"
+# VIRUS_STOCK_KEY: Final[str] = "virus_stock"
+# STOCK_TITER_KEY: Final[str] = "stock_titer"
+# DILUTION_KEY: Final[str] = "dilution"
+# INFUSION_RATE_NLMIN_KEY: Final[str] = "infusion_rate_nlmin"
+# INFUSIONS_KEY: Final[str] = "infusions"
+# AP_KEY: Final[str] = "ap"
+# ML_KEY: Final[str] = "ml"
+# DV_KEY: Final[str] = "dv"
+# INFUSION_VOLUME_NL_KEY: Final[str] = "infusion_volume_nl"
+# POST_INFUSION_FLOW_TEST_KEY: Final[str] = "post_infusion_flow_test"
+# NOTES_KEY: Final[str] = "notes"
+# IMPLANT_TYPE_KEY: Final[str] = "implant_type"
+# CRANIAL_WINDOW_KEY: Final[str] = "cranial_window"
+# CRYSTAL_SKULL_KEY: Final[str] = "crystal_skull"
+# HEADPLATE_TYPE_KEY: Final[str] = "headplate_type"
+# CS_TYPE_KEY: Final[str] = "cs_type"
+# COVERSLIP_TYPE_KEY: Final[str] = "coverslip_type"
+# COVERSLIP_DIAMETER_KEY: Final[str] = "coverslip_diameter"
+# COVERSLIP_THICKNESS_KEY: Final[str] = "coverslip_thickness"
+# REGION_KEY: Final[str] = "region"
+# CENTER_AP_KEY: Final[str] = "center_ap"
+# CENTER_ML_KEY: Final[str] = "center_ml"
+# FRONT_AP_KEY: Final[str] = "front_ap"
+# LEFT_ML_KEY: Final[str] = "left_ml"
+# WELL_TYPE_KEY: Final[str] = "well_type"
+# ELECTRODES_KEY: Final[str] = "electrodes"
+# ELECTRODE_TYPE_KEY: Final[str] = "electrode_type"
+# PROBE_MODEL_KEY: Final[str] = "probe_model"
+# PROBE_ID_KEY: Final[str] = "probe_id"
+# ELECTRODE_SITE_KEY: Final[str] = "electrode_site"
+# ELECTRODE_HEMISPHERE_KEY: Final[str] = "electrode_hemisphere"
+# PITCH_KEY: Final[str] = "pitch"
+# YAW_KEY: Final[str] = "yaw"
+# ROLL_KEY: Final[str] = "roll"
+# GROUND_KEY: Final[str] = "ground"
+# REFERENCE_KEY: Final[str] = "reference"
+
+IMAGING_CATEGORY: Final[str] = "2P Imaging"
+IMAGING_WF_OPTO_CATEGORY: Final[str] = "2P Imaging + Widefield Opto"
+IMAGING_SLM_OPTO_CATEGORY: Final[str] = "2P Imaging + SLM Opto"
+
+SESSION_TYPE_CATEGORY_OPTIONS: Final[tuple[str, ...]] = (
+    IMAGING_CATEGORY,
+    IMAGING_WF_OPTO_CATEGORY,
+    IMAGING_SLM_OPTO_CATEGORY,
 )
+
+VOLUN_RUNNING_CATEGORY: Final[str] = "Voluntary Running"
+VOLUN_FORCED_RUNNING_CATEGORY: Final[str] = "Voluntary + Forced Running"
+SEN_EVID_ACCUM_CATEGORY: Final[str] = "Sensory Evidence Accumulation"
+
+BEHAV_TASK_NAME_CATEGORY_OPTIONS: Final[tuple[str, ...]] = (
+    VOLUN_RUNNING_CATEGORY,
+    VOLUN_FORCED_RUNNING_CATEGORY,
+    SEN_EVID_ACCUM_CATEGORY,
+)
+
+BEHAV_TASK_PHASE_OPTIONS: Final[tuple[str, ...]] = (
+    "Phase_0",
+    "Phase_1A",
+    "Phase_1B",
+    "Phase_2A",
+    "Phase_2B",
+    "Phase_3A",
+    "Phase_3B",
+    "Phase_3C",
+    "Phase_3D",
+    "Phase_3E",
+    "Phase_4A",
+    "Phase_4B",
+    "Phase_4C",
+    "Phase_5",
+    "Phase_6",
+    "n/a",
+)
+
+
+IMAGING_SYSTEM_ID_OPTIONS: Final[tuple[str, ...]] = (
+    "ORiON Bruker Ultima",
+    "SLiM Bruker Investigator",
+)
+
+IMAGING_SOFTWARE_NAME_OPTIONS: Final[tuple[str, ...]] = (
+    "???",
+)
+
+# Text box for IMAGING_SOFTWARE_VERSION: 
+
+BEHAV_RIG_ID_OPTIONS: Final[tuple[str, ...]] = (
+    "Wheel 1",
+    "SEASIC 1",
+    "n/a",
+)
+
+
+
+
+# MAKE THIS MULTI-SELECT
+SENSORY_STIMULUS_TYPE_OPTIONS: Final[tuple[str, ...]] = (
+    "Bar",
+    "Air Puff",
+    "n/a",
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 HEMISPHERE_OPTIONS: Final[tuple[str, ...]] = ("LH", "RH")
 POST_INFUSION_FLOW_TEST_OPTIONS: Final[tuple[str, ...]] = (
     "Pass",
