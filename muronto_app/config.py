@@ -38,9 +38,47 @@ COVERSLIP_DIAMETER_OPTIONS_KEY: Final[str] = "coverslip_diameters"
 COVERSLIP_THICKNESS_OPTIONS_KEY: Final[str] = "coverslip_thicknesses"
 CRANIAL_WINDOW_REGION_OPTIONS_KEY: Final[str] = "cranial_window_regions"
 CS_TYPE_OPTIONS_KEY: Final[str] = "cs_types"
-CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY: Final[str] = "crystal_skill_well_types"
+CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY: Final[str] = "crystal_skull_well_types"
 PROBE_MODEL_OPTIONS_KEY: Final[str] = "probe_models"
 ELECTRODE_SITE_OPTIONS_KEY: Final[str] = "electrode_sites"
+
+SESSION_TYPE_OPTIONS_KEY: Final[str] = "session_types"
+BEHAVIOR_TASK_NAME_OPTIONS_KEY: Final[str] = "behavior_task_names"
+BEHAVIOR_TASK_PHASE_OPTIONS_KEY: Final[str] = "behavior_task_phases"
+
+INVIVO2P_IMAGER_OPTIONS_KEY: Final[str] = "invivo_2p_imagers"
+INVIVO2P_SYSTEM_ID_OPTIONS_KEY: Final[str] = "invivo_2p_system_ids"
+INVIVO2P_SOFTWARE_NAME_OPTIONS_KEY: Final[str] = "invivo_2p_software_names"
+BEHAVIOR_RIG_OPTIONS_KEY: Final[str] = "behavior_rigs"
+
+OBJECTIVE_OPTIONS_KEY: Final[str] = "objectives"
+
+SENSORY_STIMULUS_TYPE_OPTIONS_KEY: Final[str] = "sensory_stimulus_types"
+
+CAMERA_MODEL_OPTIONS_KEY: Final[str] = "camera_models"
+CAMERA_ACQ_SOFTWARE_OPTIONS_KEY: Final[str] = "camera_acq_software"
+
+GREEN_CONSTRUCT_OPTIONS_KEY: Final[str] = (
+    "green_constructs"
+)
+
+RED_CONSTRUCT_OPTIONS_KEY: Final[str] = (
+    "red_constructs"
+)
+
+CHANNEL_OPTIONS_KEY: Final[str] = "channels"
+
+IMAGING_REGION_OPTIONS_KEY: Final[str] = "imaging_regions"
+IMAGING_LAYER_OPTIONS_KEY: Final[str] = "imaging_layers"
+
+GREEN_CHANNEL_SUBSTRATE_OPTIONS_KEY: Final[str] = (
+    "green_channel_substrates"
+)
+
+RED_CHANNEL_SUBSTRATE_OPTIONS_KEY: Final[str] = (
+    "red_channel_substrates"
+)
+
 
 PROJECT_VALUE_KEYS: Final[tuple[str, ...]] = (
     PROJECT_ID_KEY,
@@ -80,10 +118,32 @@ SURGERY_OPTION_KEYS: Final[tuple[str, ...]] = (
     ELECTRODE_SITE_OPTIONS_KEY,
 )
 
+INVIVO2P_OPTION_KEYS: Final[tuple[str, ...]] = (
+    SESSION_TYPE_OPTIONS_KEY,
+    BEHAVIOR_TASK_NAME_OPTIONS_KEY,
+    BEHAVIOR_TASK_PHASE_OPTIONS_KEY,
+    INVIVO2P_IMAGER_OPTIONS_KEY,
+    INVIVO2P_SYSTEM_ID_OPTIONS_KEY,
+    INVIVO2P_SOFTWARE_NAME_OPTIONS_KEY,
+    BEHAVIOR_RIG_OPTIONS_KEY,
+    OBJECTIVE_OPTIONS_KEY,
+    SENSORY_STIMULUS_TYPE_OPTIONS_KEY,
+    CAMERA_MODEL_OPTIONS_KEY,
+    CAMERA_ACQ_SOFTWARE_OPTIONS_KEY,
+    GREEN_CONSTRUCT_OPTIONS_KEY,
+    RED_CONSTRUCT_OPTIONS_KEY,
+    CHANNEL_OPTIONS_KEY,
+    IMAGING_REGION_OPTIONS_KEY,
+    IMAGING_LAYER_OPTIONS_KEY,
+    GREEN_CHANNEL_SUBSTRATE_OPTIONS_KEY,
+    RED_CHANNEL_SUBSTRATE_OPTIONS_KEY,
+)
+
 OPTION_KEYS: Final[tuple[str, ...]] = (
     *OPTION_VALUE_KEYS,
     *SUBJECT_OPTION_KEYS,
     *SURGERY_OPTION_KEYS,
+    *INVIVO2P_OPTION_KEYS,
 )
 
 REQUIRED_OPTION_KEYS: Final[tuple[str, ...]] = (
@@ -91,7 +151,10 @@ REQUIRED_OPTION_KEYS: Final[tuple[str, ...]] = (
     *SUBJECT_OPTION_KEYS,
 )
 
-OPTIONAL_OPTION_KEYS: Final[tuple[str, ...]] = SURGERY_OPTION_KEYS
+OPTIONAL_OPTION_KEYS: Final[tuple[str, ...]] = (
+    *SURGERY_OPTION_KEYS,
+    *INVIVO2P_OPTION_KEYS,
+)
 
 DEFAULT_VALUES: Final[dict[str, str]] = {
     PROJECT_ID_KEY: "SEASIC",
@@ -187,6 +250,106 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "vmThal",
         "Claustrum",
         "BLA",
+    ],
+
+    SESSION_TYPE_OPTIONS_KEY: [
+        "2P Imaging",
+        "2P Imaging + WF Opto",
+        "2P Imaging + SLM Opto",
+    ],
+    BEHAVIOR_TASK_NAME_OPTIONS_KEY: [
+        "Voluntary_Running",
+        "Voluntary_Forced Running",
+        "Sensory Evidence Accumulation",
+        "None",
+    ],
+    BEHAVIOR_TASK_PHASE_OPTIONS_KEY: [
+        "Habituation",
+        "Training",
+        "Phase 0",
+        "Phase 1A",
+        "Phase 1B",
+        "Phase 2A",
+        "Phase 2B",
+        "Phase 3A",
+        "Phase 3B",
+        "Phase 3C",
+        "Phase 3D",
+        "Phase 3E",
+        "Phase 4A",
+        "Phase 4B",
+        "Phase 4C",
+        "Phase 5",
+        "Phase 6",
+        "n/a",
+    ],
+    INVIVO2P_IMAGER_OPTIONS_KEY: ["APF", "CY", "DK", "EP", "LZ", "MH", "SB", "SL"],
+    INVIVO2P_SYSTEM_ID_OPTIONS_KEY: [
+        "ORION (Bruker Ultima)",
+        "SLiM (Bruker Investigator)",
+    ],
+    INVIVO2P_SOFTWARE_NAME_OPTIONS_KEY: [
+        "Prairie View",
+    ],
+    BEHAVIOR_RIG_OPTIONS_KEY: [
+        "Wheel Rig 1",
+        "SEASIC Rig 1",
+    ],
+    OBJECTIVE_OPTIONS_KEY: [
+        "Olympus 25x 1.05 NA",
+    ],
+    SENSORY_STIMULUS_TYPE_OPTIONS_KEY: [
+        "Bar",
+        "Air puff",
+        "None",
+    ],
+    CAMERA_MODEL_OPTIONS_KEY: [
+        "Basler",
+        "FLIR BFS-U3-04S2M",
+    ],
+    CAMERA_ACQ_SOFTWARE_OPTIONS_KEY: ["SpinView"],
+    GREEN_CONSTRUCT_OPTIONS_KEY: [
+        "GCaMP6s",
+        "GCaMP6m",
+        "GCaMP6f",
+        "GCaMP8m",
+        "mGRASP GFP",
+        "iGluSnFR",
+    ],
+    RED_CONSTRUCT_OPTIONS_KEY: [
+        "jRGECO1a",
+        "tdTomato",
+        "mCherry",
+        "mScarlet",
+    ],
+    CHANNEL_OPTIONS_KEY: [
+        "Green",
+        "Red",
+        "Green + Red",
+    ],
+    IMAGING_REGION_OPTIONS_KEY: [
+        "S1",
+        "M2",
+        "M1",
+    ],
+    IMAGING_LAYER_OPTIONS_KEY: [
+        "L1",
+        "L2/3",
+        "L5",
+    ],
+    GREEN_CHANNEL_SUBSTRATE_OPTIONS_KEY: [
+        "Somata",
+        "Axons",
+        "Dendrites",
+        "Spines",
+        "NT Release Sites",
+    ],
+    RED_CHANNEL_SUBSTRATE_OPTIONS_KEY: [
+        "Somata",
+        "Axons",
+        "Dendrites",
+        "Spines",
+        "NT Release Sites",
     ],
 }
 
