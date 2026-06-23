@@ -14,6 +14,7 @@ from muronto_app.config import (
     BEHAVIOR_TASK_PHASE_OPTIONS_KEY,
     CAMERA_ACQ_SOFTWARE_OPTIONS_KEY,
     CAMERA_MODEL_OPTIONS_KEY,
+    CAMERA_VIEW_OPTIONS_KEY,
     CHANNEL_OPTIONS_KEY,
     GREEN_CHANNEL_SUBSTRATE_OPTIONS_KEY,
     GREEN_CONSTRUCT_OPTIONS_KEY,
@@ -95,6 +96,7 @@ CAMERAS_KEY: Final[str] = "cameras"
 CAMERA_NUMBER_KEY: Final[str] = "camera_number"
 CAMERA_MODEL_KEY: Final[str] = "camera_model"
 CAMERA_ACQ_SOFTWARE_KEY: Final[str] = "camera_acq_software"
+CAMERA_VIEW_KEY: Final[str] = "camera_view"
 CAMERA_FRAME_RATE_HZ_KEY: Final[str] = "camera_frame_rate_hz"
 CAMERA_NOTES_KEY: Final[str] = "camera_notes"
 
@@ -169,7 +171,8 @@ WF_OPTO_MODE_OPTIONS: Final[tuple[str, ...]] = (
 SLM_OPTO_MODE_OPTIONS: Final[tuple[str, ...]] = (
     "Single Target",
     "Multi Target",
-    "Sequential",
+    "Single + Multi Target",
+    "Sequential Single Target",
 )
 
 
@@ -493,6 +496,7 @@ def _validate_cameras(
         camera_acq_software = clean_string(
             camera_payload.get(CAMERA_ACQ_SOFTWARE_KEY)
         )
+        camera_view = clean_string(camera_payload.get(CAMERA_VIEW_KEY))
 
         _validate_required(
             field_name=f"{field_name}.{CAMERA_MODEL_KEY}",
@@ -502,6 +506,11 @@ def _validate_cameras(
         _validate_required(
             field_name=f"{field_name}.{CAMERA_ACQ_SOFTWARE_KEY}",
             value=camera_acq_software,
+            errors=errors,
+        )
+        _validate_required(
+            field_name=f"{field_name}.{CAMERA_VIEW_KEY}",
+            value=camera_view,
             errors=errors,
         )
 
@@ -515,6 +524,7 @@ def _validate_cameras(
             {
                 CAMERA_NUMBER_KEY: camera_number,
                 CAMERA_MODEL_KEY: camera_model,
+                CAMERA_VIEW_KEY: camera_view,
                 CAMERA_ACQ_SOFTWARE_KEY: camera_acq_software,
                 CAMERA_FRAME_RATE_HZ_KEY: camera_frame_rate_hz,
                 CAMERA_NOTES_KEY: clean_string(
@@ -1087,6 +1097,7 @@ def invivo2p_option_values(
     sensory_stimulus_types: list[str] = []
     camera_models: list[str] = []
     camera_acq_software: list[str] = []
+    camera_views: list[str] = []
     imaging_regions: list[str] = []
     imaging_layers: list[str] = []
 
@@ -1104,10 +1115,13 @@ def invivo2p_option_values(
             camera_software = clean_string(
                 raw_camera.get(CAMERA_ACQ_SOFTWARE_KEY)
             )
+            camera_view = clean_string(raw_camera.get(CAMERA_VIEW_KEY))
             if camera_model:
                 camera_models.append(camera_model)
             if camera_software:
                 camera_acq_software.append(camera_software)
+            if camera_view:
+                camera_views.append(camera_view)
 
     for raw_fov in payload.get(FOVS_KEY, []):
         if not isinstance(raw_fov, Mapping):
@@ -1138,6 +1152,7 @@ def invivo2p_option_values(
         [clean_string(payload.get(OBJECTIVE_KEY))],
         sensory_stimulus_types,
         camera_models,
+        camera_views,
         camera_acq_software,
         [clean_string(payload.get(GREEN_CONSTRUCT_KEY))],
         [clean_string(payload.get(RED_CONSTRUCT_KEY))],
@@ -1163,6 +1178,7 @@ def with_invivo2p_options(
     sensory_stimulus_types: Iterable[str] = (),
     camera_models: Iterable[str] = (),
     camera_acq_software: Iterable[str] = (),
+    camera_views: Iterable[str] = (),
     green_constructs: Iterable[str] = (),
     red_constructs: Iterable[str] = (),
     channels: Iterable[str] = (),
@@ -1202,6 +1218,8 @@ def with_invivo2p_options(
         add_option(options, CAMERA_MODEL_OPTIONS_KEY, camera_model)
     for camera_software in camera_acq_software:
         add_option(options, CAMERA_ACQ_SOFTWARE_OPTIONS_KEY, camera_software)
+    for camera_view in camera_views:
+        add_option(options, CAMERA_VIEW_OPTIONS_KEY, camera_view)
     for green_construct in green_constructs:
         add_option(options, GREEN_CONSTRUCT_OPTIONS_KEY, green_construct)
     for red_construct in red_constructs:
@@ -1246,6 +1264,7 @@ def with_invivo2p_payload_options(
         sensory_stimulus_types,
         camera_models,
         camera_acq_software,
+        camera_views,
         green_constructs,
         red_constructs,
         channels,
@@ -1268,6 +1287,7 @@ def with_invivo2p_payload_options(
         sensory_stimulus_types=sensory_stimulus_types,
         camera_models=camera_models,
         camera_acq_software=camera_acq_software,
+        camera_views=camera_views,
         green_constructs=green_constructs,
         red_constructs=red_constructs,
         channels=channels,
