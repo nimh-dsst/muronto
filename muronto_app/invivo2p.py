@@ -1283,5 +1283,5 @@ def with_invivo2p_imager_options(
     *,
     imager: str,
 ) -> tuple[dict[str, Any], bool]:
-    """Return config with a reusable invivo2p imager option and whether it changed."""
+    """Return config with a reusable invivo2p imager option."""
     return with_invivo2p_options(config, imagers=[imager])
