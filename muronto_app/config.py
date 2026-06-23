@@ -57,6 +57,7 @@ SENSORY_STIMULUS_TYPE_OPTIONS_KEY: Final[str] = "sensory_stimulus_types"
 
 CAMERA_MODEL_OPTIONS_KEY: Final[str] = "camera_models"
 CAMERA_ACQ_SOFTWARE_OPTIONS_KEY: Final[str] = "camera_acq_software"
+CAMERA_VIEW_OPTIONS_KEY: Final[str] = "camera_views"
 
 GREEN_CONSTRUCT_OPTIONS_KEY: Final[str] = (
     "green_constructs"
@@ -130,6 +131,7 @@ INVIVO2P_OPTION_KEYS: Final[tuple[str, ...]] = (
     SENSORY_STIMULUS_TYPE_OPTIONS_KEY,
     CAMERA_MODEL_OPTIONS_KEY,
     CAMERA_ACQ_SOFTWARE_OPTIONS_KEY,
+    CAMERA_VIEW_OPTIONS_KEY,
     GREEN_CONSTRUCT_OPTIONS_KEY,
     RED_CONSTRUCT_OPTIONS_KEY,
     CHANNEL_OPTIONS_KEY,
@@ -229,17 +231,17 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "AAV1-EF1a-fDIO-jRGECO1a",
     ],
     VIRUS_SOURCE_OPTIONS_KEY: ["Addgene"],
-    HEADPLATE_TYPE_OPTIONS_KEY: ["Standard_Y", "Standard_0"],
+    HEADPLATE_TYPE_OPTIONS_KEY: ["Standard Y", "Standard 0"],
     COVERSLIP_TYPE_OPTIONS_KEY: [
         "Standard Single",
         "Standard Double",
         "Electropor Single",
         "Electropor Double",
     ],
-    COVERSLIP_DIAMETER_OPTIONS_KEY: ["3.5", "3_3.5"],
-    COVERSLIP_THICKNESS_OPTIONS_KEY: ["1.5", "1.5_1.5"],
+    COVERSLIP_DIAMETER_OPTIONS_KEY: ["3.5", "3+3.5"],
+    COVERSLIP_THICKNESS_OPTIONS_KEY: ["1.5", "1.5+1.5"],
     CRANIAL_WINDOW_REGION_OPTIONS_KEY: ["S1"],
-    CS_TYPE_OPTIONS_KEY: ["Standard", "Electropor_S1"],
+    CS_TYPE_OPTIONS_KEY: ["Standard", "Slotted S1"],
     CRYSTAL_SKULL_WELL_TYPE_OPTIONS_KEY: ["Cement", "3D Printed"],
     PROBE_MODEL_OPTIONS_KEY: ["Alpha", "Beta"],
     ELECTRODE_SITE_OPTIONS_KEY: [
@@ -258,29 +260,31 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "2P Imaging + SLM Opto",
     ],
     BEHAVIOR_TASK_NAME_OPTIONS_KEY: [
-        "Voluntary_Running",
-        "Voluntary_Forced Running",
+        "Voluntary Running",
+        "Voluntary + Forced Running",
+        "Voluntary Running + Whisker Stim",
         "Sensory Evidence Accumulation",
         "None",
     ],
     BEHAVIOR_TASK_PHASE_OPTIONS_KEY: [
         "Habituation",
         "Training",
-        "Phase 0",
-        "Phase 1A",
-        "Phase 1B",
-        "Phase 2A",
-        "Phase 2B",
-        "Phase 3A",
-        "Phase 3B",
-        "Phase 3C",
-        "Phase 3D",
-        "Phase 3E",
-        "Phase 4A",
-        "Phase 4B",
-        "Phase 4C",
-        "Phase 5",
-        "Phase 6",
+        "Testing"
+        "Phase 0: Habituation",
+        "Phase 1A: Lick Port Training",
+        "Phase 1B: Reduce Lick Port Availability",
+        "Phase 2A: Response Shaping",
+        "Phase 2B: Intro Auditory Cue and No-Response Window",
+        "Phase 3A: Intro Evidence LED and Single Stim Forced Choice",
+        "Phase 3B: Intro Delay Between Evidence and Response Windows",
+        "Phase 3C: Bidirectional Push and Pull Reward",
+        "Phase 3D: Reduce response Window",
+        "Phase 3E: Intro Delay Between Threshold Response and Reward",
+        "Phase 4A: Intro Multiple Identical Stimuli per Trial",
+        "Phase 4B: Intro Mixed Stimuli per Trial",
+        "Phase 5: Testing with No Expectation Cue",
+        "Phase 6: Training Expecation Cue",
+        "Phase 7: Testing Expectation Cue"
         "n/a",
     ],
     INVIVO2P_IMAGER_OPTIONS_KEY: ["APF", "CY", "DK", "EP", "LZ", "MH", "SB", "SL"],
@@ -307,7 +311,13 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "Basler",
         "FLIR BFS-U3-04S2M",
     ],
-    CAMERA_ACQ_SOFTWARE_OPTIONS_KEY: ["SpinView"],
+    CAMERA_ACQ_SOFTWARE_OPTIONS_KEY: [
+        "SpinView",
+    ],
+    CAMERA_VIEW_OPTIONS_KEY: [
+        "Whiskers",
+        "Body",
+    ],
     GREEN_CONSTRUCT_OPTIONS_KEY: [
         "GCaMP6s",
         "GCaMP6m",
