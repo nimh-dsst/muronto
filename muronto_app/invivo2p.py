@@ -1276,3 +1276,12 @@ def with_invivo2p_payload_options(
         green_channel_substrates=green_channel_substrates,
         red_channel_substrates=red_channel_substrates,
     )
+
+
+def with_invivo2p_imager_options(
+    config: Mapping[str, Any],
+    *,
+    imager: str,
+) -> tuple[dict[str, Any], bool]:
+    """Return config with a reusable invivo2p imager option and whether it changed."""
+    return with_invivo2p_options(config, imagers=[imager])
