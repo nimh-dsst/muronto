@@ -15,6 +15,7 @@ from muronto_app.config import (
     BEHAVIOR_TASK_PHASE_OPTIONS_KEY,
     CAMERA_ACQ_SOFTWARE_OPTIONS_KEY,
     CAMERA_MODEL_OPTIONS_KEY,
+    CAMERA_VIEW_OPTIONS_KEY,
     CHANNEL_OPTIONS_KEY,
     GREEN_CHANNEL_SUBSTRATE_OPTIONS_KEY,
     GREEN_CONSTRUCT_OPTIONS_KEY,
@@ -73,13 +74,13 @@ from muronto_app.invivo2p import (
     BEHAVIOR_TASK_NAME_KEY,
     BEHAVIOR_TASK_PHASE_KEY,
     CAMERA_ACQ_SOFTWARE_KEY,
+    CAMERA_VIEW_KEY,
     CAMERA_FRAME_RATE_HZ_KEY,
     CAMERA_MODEL_KEY,
     CAMERA_NOTES_KEY,
     CAMERA_NUMBER_KEY,
     CAMERAS_KEY,
     CHANNEL_KEY,
-    CHANNEL_OPTIONS,
     DEPTH_UM_KEY,
     END_TIME_KEY,
     FOV_NOTES_KEY,
@@ -105,7 +106,6 @@ from muronto_app.invivo2p import (
     INVIVO2P_TIME_PATTERN,
     INVIVO2P_VALIDATION_ERRORS_KEY,
     NOTE_UPLOAD_TYPE,
-    NUM_FOVS_KEY,
     NUM_PLANES_KEY,
     OBJECTIVE_KEY,
     PHOTO_UPLOAD_TYPE,
@@ -145,6 +145,38 @@ from muronto_app.invivo2p import (
     format_session_time_display,
     invivo2p_record_file_token,
     with_invivo2p_payload_options,
+)
+
+# ------------------------------------------------------------------
+# Page-specific constants
+# ------------------------------------------------------------------
+
+COMMON_BEHAVIOR_TASK_PHASE_OPTIONS = (
+    "Habituation",
+    "Training",
+    "Testing",
+    "n/a",
+)
+
+SEASIC_TASK_NAME = "Sensory Evidence Accumulation"
+
+SEASIC_BEHAVIOR_TASK_PHASE_OPTIONS = (
+    "Phase 0: Habituation",
+    "Phase 1A: Lick Port Training",
+    "Phase 1B: Reduce Lick Port Availability",
+    "Phase 2A: Response Shaping",
+    "Phase 2B: Intro Auditory Cue and No-Response Window",
+    "Phase 3A: Intro Evidence LED and Single Stim Forced Choice",
+    "Phase 3B: Intro Delay Between Evidence and Response Windows",
+    "Phase 3C: Bidirectional Push and Pull Reward",
+    "Phase 3D: Reduce response Window",
+    "Phase 3E: Intro Delay Between Threshold Response and Reward",
+    "Phase 4A: Intro Multiple Identical Stimuli per Trial",
+    "Phase 4B: Intro Mixed Stimuli per Trial",
+    "Phase 5: Testing with No Expectation Cue",
+    "Phase 6: Training Expecation Cue",
+    "Phase 7: Testing Expectation Cue",
+    "n/a",
 )
 
 st.set_page_config(page_title="Muronto In Vivo 2P", layout="centered")
@@ -345,20 +377,21 @@ def render_select_with_immediate_other(
     widget_key: str,
     other_prompt: str,
     value: str = "",
+    choices: list[str] | None = None,
 ) -> str:
-    choices = choice_options(options, options_key)
+    option_choices = choices or choice_options(options, options_key)
     cleaned_value = clean_string(value)
     index = (
-        choices.index(cleaned_value)
-        if cleaned_value in choices
-        else choices.index(OTHER_CHOICE)
+        option_choices.index(cleaned_value)
+        if cleaned_value in option_choices
+        else option_choices.index(OTHER_CHOICE)
         if cleaned_value
         else 0
     )
 
     selected = st.selectbox(
         label,
-        options=choices,
+        options=option_choices,
         index=index,
         key=widget_key,
     )
@@ -369,7 +402,7 @@ def render_select_with_immediate_other(
         st.text_input(
             other_prompt,
             key=f"{widget_key}_other",
-            value="" if cleaned_value in choices else cleaned_value,
+            value="" if cleaned_value in option_choices else cleaned_value,
         )
     )
 
@@ -715,6 +748,13 @@ def save_general_invivo2p_attachments(
     return references
 
 
+def behavior_task_phase_choices(behavior_task_name: str) -> list[str]:
+    if clean_string(behavior_task_name) == SEASIC_TASK_NAME:
+        return [*SEASIC_BEHAVIOR_TASK_PHASE_OPTIONS, OTHER_CHOICE]
+
+    return [*COMMON_BEHAVIOR_TASK_PHASE_OPTIONS, OTHER_CHOICE]
+
+
 def render_session_details(
     *,
     options: dict[str, list[str]],
@@ -756,6 +796,7 @@ def render_session_details(
             widget_key=invivo2p_key(form_key, "behavior_task_phase"),
             other_prompt="New Behavior Task Phase",
             value=string_default(defaults, BEHAVIOR_TASK_PHASE_KEY),
+            choices=behavior_task_phase_choices(behavior_task_name),
         )
         imager = render_select_with_immediate_other(
             label="Imager",
@@ -1304,6 +1345,14 @@ def render_cameras(
                 other_prompt="New Camera Acquisition Software",
                 value=clean_string(defaults.get(CAMERA_ACQ_SOFTWARE_KEY)),
             )
+            camera_view = render_select_with_immediate_other(
+                label="Camera View",
+                options=options,
+                options_key=CAMERA_VIEW_OPTIONS_KEY,
+                widget_key=f"{prefix}_view",
+                other_prompt="New Camera View",
+                value=clean_string(defaults.get(CAMERA_VIEW_KEY)),
+            )
             camera_frame_rate_hz = st.number_input(
                 "Camera Frame Rate (Hz)",
                 min_value=0.0,
@@ -1321,6 +1370,7 @@ def render_cameras(
                 {
                     CAMERA_NUMBER_KEY: camera_index,
                     CAMERA_MODEL_KEY: camera_model,
+                    CAMERA_VIEW_KEY: camera_view,
                     CAMERA_ACQ_SOFTWARE_KEY: camera_acq_software,
                     CAMERA_FRAME_RATE_HZ_KEY: camera_frame_rate_hz,
                     CAMERA_NOTES_KEY: camera_notes,
