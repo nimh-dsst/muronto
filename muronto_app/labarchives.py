@@ -50,7 +50,15 @@ from muronto_app.surgery import (
     surgery_json_filename,
     surgery_record_file_token,
 )
-
+from muronto_app.invivo2p import (
+    INVIVO2P_ATTACHMENT_CAPTION,
+    INVIVO2P_DRAFT_ID_KEY,
+    INVIVO2P_FILE_ATTACHMENT_CAPTION,
+    INVIVO2P_FILE_UPLOAD_TYPES,
+    SESSION_DATE_KEY,
+    invivo2p_json_filename,
+    invivo2p_record_file_token,
+)
 
 @dataclass(frozen=True)
 class ConfigReadResult:
@@ -98,6 +106,34 @@ class SurgeryRecord:
 @dataclass(frozen=True)
 class SurgeryFileAttachmentWriteResult:
     """Result of writing a surgery support-file attachment."""
+
+    page: Any
+    attachment_entry: Any
+    reference: dict[str, str]
+    created: bool
+
+
+@dataclass(frozen=True)
+class Invivo2pWriteResult:
+    """Result of writing an invivo2p JSON attachment."""
+
+    page: Any
+    attachment_entry: Any
+    created: bool
+
+
+@dataclass(frozen=True)
+class Invivo2pRecord:
+    """An invivo2p JSON payload paired with its LabArchives attachment entry."""
+
+    page: Any
+    attachment_entry: Any
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class Invivo2pFileAttachmentWriteResult:
+    """Result of writing an invivo2p support-file attachment."""
 
     page: Any
     attachment_entry: Any
@@ -709,6 +745,190 @@ def save_surgery_file_attachment(
         created=created,
     )
 
+
+def find_invivo2p_attachment(page: Any, filename: str) -> Any | None:
+    """Return an existing invivo2p JSON attachment by filename."""
+    for entry in page.entries:
+        if not is_attachment_entry(entry):
+            continue
+        if attachment_matches_filename_and_caption(
+            entry,
+            filename=filename,
+            caption=INVIVO2P_ATTACHMENT_CAPTION,
+        ):
+            return entry
+    return None
+
+
+def read_invivo2p_attachment(entry: Any) -> dict[str, Any] | None:
+    """Read an invivo2p JSON attachment when it is valid enough for UI."""
+    try:
+        decoded = _read_json_attachment(entry)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(decoded, Mapping):
+        return None
+
+    payload = {
+        key: value
+        for raw_key, value in decoded.items()
+        if (key := clean_string(raw_key))
+    }
+    if not payload.get(ANIMAL_ID_KEY) or not invivo2p_record_file_token(
+        payload
+    ):
+        return None
+    return payload
+
+
+def discover_invivo2p_records(page: Any) -> list[Invivo2pRecord]:
+    """Return invivo2p JSON records on a subject page."""
+    records: list[Invivo2pRecord] = []
+    for entry in page.entries:
+        if not is_attachment_entry(entry):
+            continue
+        if not attachment_matches_caption(entry, INVIVO2P_ATTACHMENT_CAPTION):
+            continue
+
+        payload = read_invivo2p_attachment(entry)
+        if payload is None:
+            continue
+        records.append(
+            Invivo2pRecord(
+                page=page,
+                attachment_entry=entry,
+                payload=payload,
+            )
+        )
+
+    return sorted(
+        records,
+        key=lambda record: (
+            clean_string(record.payload.get(SESSION_DATE_KEY)),
+            clean_string(record.payload.get(INVIVO2P_DRAFT_ID_KEY)),
+            clean_string(record.payload.get(ANIMAL_ID_KEY)).lower(),
+        ),
+    )
+
+
+def save_invivo2p_attachment(
+    page: Any,
+    invivo2p_payload: Mapping[str, Any],
+    *,
+    existing_entry: Any | None = None,
+) -> Invivo2pWriteResult:
+    """Create or update an invivo2p JSON attachment on a subject page."""
+    animal_id = clean_string(invivo2p_payload.get(ANIMAL_ID_KEY))
+    file_token = invivo2p_record_file_token(invivo2p_payload)
+    if not animal_id:
+        raise ValueError(f"{ANIMAL_ID_LABEL} is required.")
+    if not file_token:
+        raise ValueError("session_date or invivo2p_draft_id is required.")
+
+    filename = invivo2p_json_filename(animal_id, file_token)
+    entry_to_update = existing_entry or find_invivo2p_attachment(
+        page,
+        filename,
+    )
+    if entry_to_update is not None:
+        entry_to_update.content = _json_attachment_content(
+            invivo2p_payload,
+            filename=filename,
+            caption=INVIVO2P_ATTACHMENT_CAPTION,
+        )
+        _sync_json_reference_text_entry(
+            page,
+            invivo2p_payload,
+            attachment_entry=entry_to_update,
+            caption=INVIVO2P_ATTACHMENT_CAPTION,
+        )
+        return Invivo2pWriteResult(
+            page=page,
+            attachment_entry=entry_to_update,
+            created=False,
+        )
+
+    attachment_entry, _text_entry = page.entries.create_json_entry(
+        dict(invivo2p_payload),
+        filename=filename,
+        caption=INVIVO2P_ATTACHMENT_CAPTION,
+    )
+    return Invivo2pWriteResult(
+        page=page,
+        attachment_entry=attachment_entry,
+        created=True,
+    )
+
+
+def find_invivo2p_file_attachment(page: Any, filename: str) -> Any | None:
+    """Return an existing invivo2p support-file attachment by filename."""
+    for entry in page.entries:
+        if not is_attachment_entry(entry):
+            continue
+        if attachment_matches_filename_and_caption(
+            entry,
+            filename=filename,
+            caption=INVIVO2P_FILE_ATTACHMENT_CAPTION,
+        ):
+            return entry
+    return None
+
+
+def save_invivo2p_file_attachment(
+    page: Any,
+    *,
+    payload: bytes,
+    filename: str,
+    mime_type: str,
+    upload_type: str,
+) -> Invivo2pFileAttachmentWriteResult:
+    """Create or update an invivo2p support-file attachment on a subject page."""
+    cleaned_filename = clean_string(filename)
+    cleaned_mime_type = clean_string(mime_type)
+    cleaned_upload_type = clean_string(upload_type)
+    if not cleaned_filename:
+        raise ValueError("filename is required.")
+    if not cleaned_mime_type:
+        raise ValueError("mime_type is required.")
+    if cleaned_upload_type not in INVIVO2P_FILE_UPLOAD_TYPES:
+        raise ValueError(
+            "upload_type must be one of "
+            + ", ".join(INVIVO2P_FILE_UPLOAD_TYPES)
+            + "."
+        )
+
+    attachment = _file_attachment_content(
+        payload,
+        filename=cleaned_filename,
+        caption=INVIVO2P_FILE_ATTACHMENT_CAPTION,
+        mime_type=cleaned_mime_type,
+    )
+    existing_entry = find_invivo2p_file_attachment(page, cleaned_filename)
+    if existing_entry is not None:
+        existing_entry.content = attachment
+        entry = existing_entry
+        created = False
+    else:
+        entry = page.entries.create(AttachmentEntry, attachment)
+        created = True
+
+    entry_id = clean_string(getattr(entry, "id", ""))
+    if not entry_id:
+        raise ValueError("Uploaded attachment entry did not include an id.")
+
+    return Invivo2pFileAttachmentWriteResult(
+        page=page,
+        attachment_entry=entry,
+        reference={
+            UPLOAD_TYPE_KEY: cleaned_upload_type,
+            ENTRY_ID_KEY: entry_id,
+            FILENAME_KEY: cleaned_filename,
+            CAPTION_KEY: INVIVO2P_FILE_ATTACHMENT_CAPTION,
+            MIME_TYPE_KEY: cleaned_mime_type,
+        },
+        created=created,
+    )
 
 def sorted_directories(container: Any) -> list[Any]:
     """Return child folders sorted by display name."""
