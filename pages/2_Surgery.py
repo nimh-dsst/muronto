@@ -1400,12 +1400,6 @@ def render_cranial_window_implant(
         other_prompt="New Headplate Type",
         notebook=notebook,
         config=config,
-        choices=scoped_choice_options(
-            options,
-            HEADPLATE_TYPE_OPTIONS_KEY,
-            ("Standard_Y",),
-            ("Standard_0",),
-        ),
         value=clean_string(defaults.get(HEADPLATE_TYPE_KEY)),
     )
     coverslip_type = render_select_with_immediate_other(
