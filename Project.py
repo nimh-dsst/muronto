@@ -612,6 +612,34 @@ def render_dropdown_option_viewer(
             "in muronto_config."
         )
 
+        all_custom_values = []
+        for option_key in sorted(options):
+            default_values_for_key = set(default_options.get(option_key, []))
+            for value in options.get(option_key, []):
+                if value not in default_values_for_key:
+                    all_custom_values.append(
+                        {
+                            "Option category": option_key,
+                            "Custom value": value,
+                        }
+                    )
+
+        if all_custom_values:
+            st.warning(
+                f"{len(all_custom_values)} total custom/saved value(s) "
+                "are not present in source-code defaults."
+            )
+            st.dataframe(
+                all_custom_values,
+                hide_index=True,
+                width="stretch",
+            )
+        else:
+            st.success(
+               "Custom Value Audit: no custom/saved dropdown values were found "
+                "across all option categories."
+            )
+        
         option_keys = sorted(options)
         selected_key = st.selectbox(
             "Option category",
@@ -677,7 +705,7 @@ def render_dropdown_option_viewer(
         st.subheader("Remove custom dropdown value")
         st.warning(
             "This removes the value only from muronto_config dropdown options. "
-            "It does not modify existing subject, surgery, or invivo2p records."
+            "It does not modify existing records."
         )
 
         value_to_remove = st.selectbox(
