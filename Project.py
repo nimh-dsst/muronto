@@ -594,6 +594,79 @@ def render_config_summary(
         st.json(config)
 
 
+def render_dropdown_option_viewer(config: dict[str, Any]) -> None:
+    """Render a read-only view of saved dropdown option values."""
+    options = normalize_options(config.get(OPTIONS_KEY))
+    default_options = normalize_options(DEFAULT_OPTIONS)
+    if not options:
+        return
+
+    with st.expander("Manage dropdown options", expanded=False):
+        st.caption(
+            "Read-only view. These are the dropdown values currently saved "
+            "in muronto_config."
+        )
+
+        option_keys = sorted(options)
+        selected_key = st.selectbox(
+            "Option category",
+            options=option_keys,
+            key="config_option_viewer_category",
+        )
+
+        values = options.get(selected_key, [])
+        default_values = set(default_options.get(selected_key, []))
+
+        custom_values = [
+            value for value in values
+            if value not in default_values
+        ]
+
+        st.write(f"{len(values)} value(s) saved for `{selected_key}`.")
+
+        if not values:
+            st.info("No values are saved for this option category.")
+            return
+
+        if custom_values:
+            st.warning(
+                f"{len(custom_values)} custom/saved value(s) are not present in "
+                "the current source-code defaults."
+            )
+            st.dataframe(
+                [
+                    {
+                        "Custom value": value,
+                        "Reason": "Not present in source-code defaults",
+                    }
+                    for value in custom_values
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+        else:
+            st.success(
+                "All saved values for this category are present in the current "
+                "source-code defaults."
+            )
+
+        st.dataframe(
+            [
+                {
+                    "Value": value,
+                    "Source": (
+                        "Default/source code"
+                        if value in default_values
+                        else "Custom/saved"
+                    ),
+                }
+                for value in values
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
 def project_form_defaults(
     project: dict[str, str] | None,
 ) -> dict[str, str]:
@@ -800,6 +873,8 @@ def render_project_manager(
         project,
         investigator_for_user(config, user.email),
     )
+
+    render_dropdown_option_viewer(config)
 
     action = st.radio(
         "Project action",
