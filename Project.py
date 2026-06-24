@@ -594,7 +594,12 @@ def render_config_summary(
         st.json(config)
 
 
-def render_dropdown_option_viewer(config: dict[str, Any]) -> None:
+def render_dropdown_option_viewer(
+    *,
+    config_page: Any,
+    existing_entry: Any | None,
+    config: dict[str, Any],
+) -> None:
     """Render a read-only view of saved dropdown option values."""
     options = normalize_options(config.get(OPTIONS_KEY))
     default_options = normalize_options(DEFAULT_OPTIONS)
@@ -642,7 +647,7 @@ def render_dropdown_option_viewer(config: dict[str, Any]) -> None:
                     for value in custom_values
                 ],
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.success(
@@ -662,9 +667,122 @@ def render_dropdown_option_viewer(config: dict[str, Any]) -> None:
                 }
                 for value in values
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
+        if not custom_values:
+            return
+
+        st.divider()
+        st.subheader("Remove custom dropdown value")
+        st.warning(
+            "This removes the value only from muronto_config dropdown options. "
+            "It does not modify existing subject, surgery, or invivo2p records."
+        )
+
+        value_to_remove = st.selectbox(
+            "Custom value to remove",
+            options=custom_values,
+            key="config_option_value_to_remove",
+        )
+
+        confirmation = st.text_input(
+            f"Type `{value_to_remove}` to confirm removal",
+            key="config_option_remove_confirmation",
+        )
+
+        remove_enabled = (
+            clean_string(confirmation) == value_to_remove
+        )
+
+        if st.button(
+            "Remove custom value",
+            type="secondary",
+            disabled=not remove_enabled,
+            key="config_option_remove_button",
+        ):
+            remove_custom_dropdown_option_value(
+                config_page=config_page,
+                existing_entry=existing_entry,
+                config=config,
+                option_key=selected_key,
+                value=value_to_remove,
+            )
+
+
+def save_config_options_update(
+    *,
+    config_page: Any,
+    existing_entry: Any | None,
+    config: dict[str, Any],
+    updated_options: dict[str, list[str]],
+) -> None:
+    """Save updated dropdown options back to muronto_config."""
+    updated_config = dict(config)
+    updated_config[OPTIONS_KEY] = updated_options
+
+    try:
+        attachment_entry = save_config_attachment(
+            config_page,
+            updated_config,
+            existing_entry=existing_entry,
+        )
+    except ApiError as exc:
+        st.error(f"Unable to save updated dropdown options: {exc}")
+        return
+
+    st.session_state[CONFIG_STATE_KEY] = updated_config
+    st.session_state[CONFIG_ATTACHMENT_STATE_KEY] = attachment_entry
+    st.session_state[CONFIG_PAGE_STATE_KEY] = config_page
+    st.session_state[CONFIG_PAGE_ID_STATE_KEY] = config_page.id
+    st.success("Saved dropdown options.")
+    st.rerun()
+
+
+def remove_custom_dropdown_option_value(
+    *,
+    config_page: Any,
+    existing_entry: Any | None,
+    config: dict[str, Any],
+    option_key: str,
+    value: str,
+) -> None:
+    """Remove one custom/saved dropdown option value from muronto_config."""
+    cleaned_option_key = clean_string(option_key)
+    cleaned_value = clean_string(value)
+    if not cleaned_option_key or not cleaned_value:
+        st.warning("Select an option category and custom value to remove.")
+        return
+
+    options = normalize_options(config.get(OPTIONS_KEY))
+    default_options = normalize_options(DEFAULT_OPTIONS)
+    default_values = set(default_options.get(cleaned_option_key, []))
+    current_values = options.get(cleaned_option_key, [])
+
+    if cleaned_value in default_values:
+        st.error(
+            "This value is present in the source-code defaults and cannot "
+            "be removed from the saved config manager."
+        )
+        return
+
+    if cleaned_value not in current_values:
+        st.warning(f"`{cleaned_value}` is not in `{cleaned_option_key}`.")
+        return
+
+    updated_values = [
+        current_value
+        for current_value in current_values
+        if current_value != cleaned_value
+    ]
+    options[cleaned_option_key] = updated_values
+
+    save_config_options_update(
+        config_page=config_page,
+        existing_entry=existing_entry,
+        config=config,
+        updated_options=options,
+    )
 
 
 def project_form_defaults(
@@ -874,8 +992,11 @@ def render_project_manager(
         investigator_for_user(config, user.email),
     )
 
-    render_dropdown_option_viewer(config)
-
+    render_dropdown_option_viewer(
+        config_page=config_page,
+        existing_entry=existing_entry,
+        config=config,
+    )
     action = st.radio(
         "Project action",
         options=("Edit selected project", "Add project"),
