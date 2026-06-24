@@ -254,6 +254,8 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "vmThal",
         "Claustrum",
         "BLA",
+        "Cerebellum",
+        "RSP",
     ],
 
     SESSION_TYPE_OPTIONS_KEY: [
@@ -295,29 +297,37 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "SLiM (Bruker Investigator)",
     ],
     INVIVO2P_SOFTWARE_NAME_OPTIONS_KEY: [
-        "Prairie View",
+        "PrairieView",
     ],
     BEHAVIOR_RIG_OPTIONS_KEY: [
         "Wheel Rig 1",
         "SEASIC Rig 1",
     ],
     OBJECTIVE_OPTIONS_KEY: [
-        "Olympus 25x 1.05 NA",
+        "Nikon LDW 16x/0.80W DIC N2 inf/0 WD 3.0",
+        "Nikon Plan Fluor 10x/0.30 OFN25 DIC L/N1",
+        "Nikon Plan Fluor 4x/0.13 OFN25 WD 17.2"
     ],
     SENSORY_STIMULUS_TYPE_OPTIONS_KEY: [
-        "Bar",
-        "Air puff",
+        "Whisker Bar",
+        "Whisker Air Puff",
         "None",
     ],
     CAMERA_MODEL_OPTIONS_KEY: [
-        "Basler",
+        "Basler acA2000 = 340 kmNIR",
+        "Basler acA1300 - 200uc",
+        "Basler a2A1920 - 160usBAS",
         "FLIR BFS-U3-04S2M",
     ],
     CAMERA_ACQ_SOFTWARE_OPTIONS_KEY: [
+        "StreamPix10",
+        "AmScope",
         "SpinView",
     ],
     CAMERA_VIEW_OPTIONS_KEY: [
         "Whiskers",
+        "Side",
+        "Front",
         "Body",
     ],
     GREEN_CONSTRUCT_OPTIONS_KEY: [
