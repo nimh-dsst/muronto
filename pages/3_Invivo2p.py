@@ -9,6 +9,10 @@ from uuid import uuid4
 import streamlit as st
 from labapi import ApiError
 
+from muronto_app.prairieview_xml_metadata_auditor import (
+    parse_prairieview_xml_bytes,
+)
+
 from muronto_app.config import (
     BEHAVIOR_RIG_OPTIONS_KEY,
     BEHAVIOR_TASK_NAME_OPTIONS_KEY,
@@ -150,6 +154,8 @@ from muronto_app.invivo2p import (
 # ------------------------------------------------------------------
 # Page-specific constants
 # ------------------------------------------------------------------
+
+INVIVO2P_XML_METADATA_KEY = "invivo2p_xml_metadata"
 
 COMMON_BEHAVIOR_TASK_PHASE_OPTIONS = (
     "Habituation",
@@ -1454,6 +1460,43 @@ def render_raw_data_paths(
     }
 
 
+def render_prairieview_xml_import(*, form_key: str) -> dict[str, Any]:
+    with st.expander("PrairieView XML Metadata Import", expanded=False):
+        uploaded_xml = st.file_uploader(
+            "PrairieView XML file",
+            type=["xml"],
+            key=invivo2p_key(form_key, "prairieview_xml_upload"),
+        )
+
+        if uploaded_xml is None:
+            return {}
+
+        try:
+            parsed = parse_prairieview_xml_bytes(uploaded_xml.getvalue())
+        except Exception as exc:
+            st.error(f"Unable to parse PrairieView XML: {exc}")
+            return {}
+
+        metadata = parsed.get("metadata", {})
+        st.success("Parsed PrairieView XML.")
+
+        laser_wavelength = metadata.get("laser_wavelength_nm", "")
+        st.write(f"Detected laser wavelength: `{laser_wavelength}` nm")
+
+        if st.button(
+            "Apply laser wavelength to record",
+            key=invivo2p_key(form_key, "apply_xml_laser_wavelength"),
+            use_container_width=True,
+        ):
+            st.session_state[
+                invivo2p_key(form_key, "imaging_laser_wavelength_nm")
+            ] = float(laser_wavelength)
+            st.session_state[INVIVO2P_XML_METADATA_KEY] = metadata
+            st.rerun()
+
+        return metadata
+
+
 def render_invivo2p_form(
     *,
     notebook: Any,
@@ -1479,6 +1522,9 @@ def render_invivo2p_form(
         form_key=form_key,
         defaults=payload_defaults,
     )
+
+    render_prairieview_xml_import(form_key=form_key)
+
     imaging_values = render_imaging_settings(
         options=options,
         form_key=form_key,
