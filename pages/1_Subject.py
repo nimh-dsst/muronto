@@ -77,6 +77,8 @@ st.set_page_config(page_title="Muronto Subject", layout="centered")
 SUBJECT_PAIR_COUNT_KEY = "subject_strain_genotype_count"
 SUBJECT_EDIT_MODE_KEY = "subject_edit_existing"
 SUBJECT_SELECTED_RECORD_KEY = "subject_edit_record"
+SUBJECT_COPY_MODE_KEY = "subject_copy_existing"
+SUBJECT_COPY_SOURCE_RECORD_KEY = "subject_copy_source_record"
 
 
 def render_text_guidance(text: str) -> None:
@@ -308,13 +310,31 @@ def render_subject_form(
     config: dict[str, Any],
     home_folder: Any,
     existing_record: SubjectRecord | None = None,
+    copied_payload: dict[str, Any] | None = None,
+    copy_source_key: str = "",
 ) -> None:
     options = normalize_options(config.get(OPTIONS_KEY))
-    payload_defaults = existing_record.payload if existing_record else {}
+    payload_defaults = {}
+    if existing_record is not None:
+        payload_defaults = existing_record.payload
+    elif copied_payload is not None:
+        payload_defaults = copied_payload
+
     is_editing = existing_record is not None
+    is_copying = copied_payload is not None and existing_record is None
+
     form_key = "subject_create"
+
     if existing_record is not None:
         form_key = f"subject_edit_{subject_record_widget_key(existing_record)}"
+
+    elif copied_payload is not None:
+        form_key = f"subject_copy_{copy_source_key or 'source'}"
+    if is_copying:
+        payload_defaults = dict(payload_defaults)
+        payload_defaults[ANIMAL_ID_KEY] = ""
+        payload_defaults[EAR_TAG_KEY] = ""
+        payload_defaults[CCN_KEY] = ""
     count_key = f"{form_key}_{SUBJECT_PAIR_COUNT_KEY}"
 
     if st.button(
@@ -403,10 +423,12 @@ def render_subject_form(
         value=payload_defaults.get(PARENT_CCN_KEY, ""),
         widget_key=f"{form_key}_parent_ccn",
     )
-
-    submit_label = (
-        "Save subject edits" if is_editing else "Create subject page"
-    )
+    if is_editing:
+        submit_label = "Save subject edits"
+    elif is_copying:
+        submit_label = "Create copied subject page"
+    else:
+        submit_label = "Create subject page"
     submitted = st.button(
         submit_label,
         type="primary",
@@ -519,6 +541,15 @@ def main() -> None:
         key=SUBJECT_EDIT_MODE_KEY,
     )
 
+    copy_existing = st.toggle(
+        "Copy values from existing subject",
+        key=SUBJECT_COPY_MODE_KEY,
+        disabled=edit_existing,
+    )
+
+    if edit_existing and copy_existing:
+        copy_existing = False
+
     try:
         home_folder = resolve_notebook_folder(
             notebook,
@@ -531,7 +562,7 @@ def main() -> None:
         st.error(str(exc))
         return
 
-    if not edit_existing:
+    if not edit_existing and not copy_existing:
         render_subject_form(
             notebook=notebook,
             config=config,
@@ -546,12 +577,42 @@ def main() -> None:
         st.info("No subject JSON records were found in the project folder.")
         return
 
+    # -------------------------
+    # Copy mode
+    # -------------------------
+    if copy_existing:
+        selected_copy_index = st.selectbox(
+            "Copy values from subject",
+            options=list(range(len(subject_records))),
+            format_func=lambda index: subject_label(subject_records[index]),
+            key=SUBJECT_COPY_SOURCE_RECORD_KEY,
+        )
+
+        st.info(
+            "Copied values will pre-fill the form, but a new subject page will be created."
+        )
+
+        copy_source_record = subject_records[selected_copy_index]
+
+        render_subject_form(
+            notebook=notebook,
+            config=config,
+            home_folder=home_folder,
+            copied_payload=copy_source_record.payload,
+            copy_source_key=subject_record_widget_key(copy_source_record),
+        )
+        return
+
+    # -------------------------
+    # Edit mode
+    # -------------------------
     selected_subject_index = st.selectbox(
         "Subject",
         options=list(range(len(subject_records))),
         format_func=lambda index: subject_label(subject_records[index]),
         key=SUBJECT_SELECTED_RECORD_KEY,
     )
+
     render_subject_form(
         notebook=notebook,
         config=config,
