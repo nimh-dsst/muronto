@@ -1481,16 +1481,26 @@ def render_prairieview_xml_import(*, form_key: str) -> dict[str, Any]:
         st.success("Parsed PrairieView XML.")
 
         laser_wavelength = metadata.get("laser_wavelength_nm", "")
+        optical_zoom = metadata.get("optical_zoom", "")
+
         st.write(f"Detected laser wavelength: `{laser_wavelength}` nm")
+        st.write(f"Detected zoom: `{optical_zoom}`")
 
         if st.button(
-            "Apply laser wavelength to record",
-            key=invivo2p_key(form_key, "apply_xml_laser_wavelength"),
+            "Apply XML metadata to record",
+            key=invivo2p_key(form_key, "apply_xml_metadata"),
             use_container_width=True,
         ):
-            st.session_state[
-                invivo2p_key(form_key, "imaging_laser_wavelength_nm")
-            ] = float(laser_wavelength)
+            if laser_wavelength not in ("", None):
+                st.session_state[
+                    invivo2p_key(form_key, "imaging_laser_wavelength_nm")
+                ] = float(laser_wavelength)
+
+            if optical_zoom not in ("", None):
+                st.session_state[
+                    invivo2p_key(form_key, "zoom")
+                ] = float(optical_zoom)
+
             st.session_state[INVIVO2P_XML_METADATA_KEY] = metadata
             st.rerun()
 
