@@ -1149,8 +1149,8 @@ def render_planes(
         increment_plane_count(form_key, fov_index)
         st.rerun()
     if st.button(
-        "Delete last plane",
-        key=invivo2p_key(form_key, f"fov_{fov_index}_delete_plane"),
+        "Remove last plane",
+        key=invivo2p_key(form_key, f"fov_{fov_index}_remove_plane"),
         use_container_width=True,
     ):
         decrement_plane_count(form_key, fov_index)
@@ -1213,8 +1213,8 @@ def render_fovs(
         st.rerun()
 
     if st.button(
-        "Delete last FOV",
-        key=invivo2p_key(form_key, "delete_fov"),
+        "Remove last FOV",
+        key=invivo2p_key(form_key, "remove_fov"),
         use_container_width=True,
     ):
         decrement_fov_count(form_key)
