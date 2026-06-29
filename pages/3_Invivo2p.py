@@ -1116,10 +1116,20 @@ def increment_fov_count(form_key: str) -> None:
     count_key = invivo2p_count_key(form_key, INVIVO2P_FOV_COUNT_KEY)
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
 
+def decrement_fov_count(form_key: str) -> None:
+    count_key = invivo2p_count_key(form_key, INVIVO2P_FOV_COUNT_KEY)
+    current_count = st.session_state.get(count_key, 1)
+    st.session_state[count_key] = max(1, current_count - 1)
 
 def increment_plane_count(form_key: str, fov_index: int) -> None:
     count_key = fov_plane_count_key(form_key, fov_index)
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+
+
+def decrement_plane_count(form_key: str, fov_index: int) -> None:
+    count_key = fov_plane_count_key(form_key, fov_index)
+    current_count = st.session_state.get(count_key, 1)
+    st.session_state[count_key] = max(1, current_count - 1)
 
 
 def render_planes(
@@ -1138,7 +1148,13 @@ def render_planes(
     ):
         increment_plane_count(form_key, fov_index)
         st.rerun()
-
+    if st.button(
+        "Delete last plane",
+        key=invivo2p_key(form_key, f"fov_{fov_index}_delete_plane"),
+        use_container_width=True,
+    ):
+        decrement_plane_count(form_key, fov_index)
+        st.rerun()
     planes: list[dict[str, object]] = []
     for plane_index in range(1, st.session_state[count_key] + 1):
         defaults = values[plane_index - 1] if plane_index <= len(values) else {}
@@ -1194,6 +1210,14 @@ def render_fovs(
         use_container_width=True,
     ):
         increment_fov_count(form_key)
+        st.rerun()
+
+    if st.button(
+        "Delete last FOV",
+        key=invivo2p_key(form_key, "delete_fov"),
+        use_container_width=True,
+    ):
+        decrement_fov_count(form_key)
         st.rerun()
 
     fovs: list[dict[str, object]] = []
