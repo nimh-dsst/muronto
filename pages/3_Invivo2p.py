@@ -191,6 +191,9 @@ INVIVO2P_CREATE_FORM_KEY = "invivo2p"
 INVIVO2P_EDIT_MODE_KEY = "invivo2p_edit_existing"
 INVIVO2P_SELECTED_RECORD_KEY = "invivo2p_edit_record"
 
+INVIVO2P_COPY_MODE_KEY = "invivo2p_copy_existing"
+INVIVO2P_COPY_SOURCE_RECORD_KEY = "invivo2p_copy_source_record"
+
 INVIVO2P_STIMULUS_COUNT_KEY = "invivo2p_stimulus_count"
 INVIVO2P_CAMERA_COUNT_KEY = "invivo2p_camera_count"
 INVIVO2P_FOV_COUNT_KEY = "invivo2p_fov_count"
@@ -354,6 +357,16 @@ def invivo2p_record_label(record: Invivo2pRecord) -> str:
     ):
         label = f"{label} (incomplete)"
     return label
+
+
+def subject_invivo2p_record_label(
+    pair: tuple[SubjectRecord, Invivo2pRecord],
+) -> str:
+    subject_record, invivo2p_record = pair
+    return (
+        f"{subject_label(subject_record)} | "
+        f"{invivo2p_record_label(invivo2p_record)}"
+    )
 
 
 def invivo2p_draft_id(
@@ -526,6 +539,22 @@ def load_invivo2p_records(page: Any) -> list[Invivo2pRecord] | None:
     except ApiError as exc:
         st.error(f"Unable to load invivo2p records from LabArchives: {exc}")
     return None
+
+
+def load_all_invivo2p_records(
+    subject_records: Sequence[SubjectRecord],
+) -> list[tuple[SubjectRecord, Invivo2pRecord]] | None:
+    all_invivo2p_records: list[tuple[SubjectRecord, Invivo2pRecord]] = []
+
+    for subject_record in subject_records:
+        invivo2p_records = load_invivo2p_records(subject_record.page)
+        if invivo2p_records is None:
+            return None
+
+        for invivo2p_record in invivo2p_records:
+            all_invivo2p_records.append((subject_record, invivo2p_record))
+
+    return all_invivo2p_records
 
 
 def sanitize_upload_filename(filename: str) -> str:
@@ -1515,14 +1544,37 @@ def render_invivo2p_form(
     investigator: str,
     selected_subject: SubjectRecord,
     existing_record: Invivo2pRecord | None = None,
+    copied_payload: dict[str, Any] | None = None,
+    copy_source_key: str = "",
 ) -> None:
     subject_payload = selected_subject.payload
-    payload_defaults = existing_record.payload if existing_record else {}
+
+    payload_defaults = {}
+    if existing_record is not None:
+        payload_defaults = existing_record.payload
+    elif copied_payload is not None:
+        payload_defaults = copied_payload
+
+    is_copying = copied_payload is not None and existing_record is None
+
     form_key = INVIVO2P_CREATE_FORM_KEY
     if existing_record is not None:
         form_key = (
             f"invivo2p_edit_{invivo2p_record_widget_key(existing_record)}"
         )
+    elif copied_payload is not None:
+        form_key = f"invivo2p_copy_{copy_source_key or 'source'}"
+
+    if is_copying:
+        payload_defaults = dict(payload_defaults)
+        payload_defaults[SESSION_DATE_KEY] = ""
+        payload_defaults[SESSION_ID_KEY] = ""
+        payload_defaults[INVIVO2P_DRAFT_ID_KEY] = ""
+        payload_defaults[ATTACHMENTS_KEY] = []
+        payload_defaults[RAW_2P_IMAGING_DATA_PATH_KEY] = ""
+        payload_defaults[RAW_2P_IMAGING_METADATA_PATH_KEY] = ""
+        payload_defaults[RAW_2P_SYNC_DATA_PATH_KEY] = ""
+        payload_defaults[RAW_2P_SYNC_METADATA_PATH_KEY] = ""
 
     existing_references = existing_attachment_references(payload_defaults)
     options = normalize_options(config.get(OPTIONS_KEY))
@@ -1791,6 +1843,15 @@ def main() -> None:
         key=INVIVO2P_EDIT_MODE_KEY,
     )
 
+    copy_existing = st.toggle(
+        "Copy values from existing invivo2p record",
+        key=INVIVO2P_COPY_MODE_KEY,
+        disabled=edit_existing,
+    )
+
+    if edit_existing and copy_existing:
+        copy_existing = False
+
     with st.expander("Subject Information", expanded=True):
         subject_records = load_subject_records(notebook, project)
         if subject_records is None:
@@ -1811,6 +1872,9 @@ def main() -> None:
         render_selected_subject(selected_subject)
 
     selected_invivo2p_record: Invivo2pRecord | None = None
+    copied_invivo2p_payload: dict[str, Any] | None = None
+    copy_source_key = ""
+
     if edit_existing:
         invivo2p_records = load_invivo2p_records(selected_subject.page)
         if invivo2p_records is None:
@@ -1831,6 +1895,37 @@ def main() -> None:
         )
         selected_invivo2p_record = invivo2p_records[selected_invivo2p_index]
 
+    elif copy_existing:
+        all_invivo2p_records = load_all_invivo2p_records(subject_records)
+        if all_invivo2p_records is None:
+            return
+        if not all_invivo2p_records:
+            st.info("No invivo2p JSON records were found in any subject.")
+            return
+
+        selected_copy_index = st.selectbox(
+            "Source Invivo2p Record to Copy",
+            options=list(range(len(all_invivo2p_records))),
+            format_func=lambda index: subject_invivo2p_record_label(
+                all_invivo2p_records[index]
+            ),
+            key=INVIVO2P_COPY_SOURCE_RECORD_KEY,
+        )
+
+        st.info(
+            "The selected source invivo2p record will pre-fill the form. "
+            "Saving will create a new invivo2p record for the destination subject."
+        )
+
+        copy_source_subject, copy_source_record = all_invivo2p_records[
+            selected_copy_index
+        ]
+        copied_invivo2p_payload = copy_source_record.payload
+        copy_source_key = (
+            f"{subject_label(copy_source_subject)}_"
+            f"{invivo2p_record_widget_key(copy_source_record)}"
+        )
+
     render_invivo2p_form(
         notebook=notebook,
         config=config,
@@ -1838,6 +1933,8 @@ def main() -> None:
         investigator=investigator,
         selected_subject=selected_subject,
         existing_record=selected_invivo2p_record,
+        copied_payload=copied_invivo2p_payload,
+        copy_source_key=copy_source_key,
     )
 
 
