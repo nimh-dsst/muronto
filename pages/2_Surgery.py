@@ -880,6 +880,12 @@ def increment_medication_count(form_key: str) -> None:
     st.session_state[count_key] = st.session_state.get(count_key, 0) + 1
 
 
+def decrement_medication_count(form_key: str) -> None:
+    count_key = surgery_count_key(form_key, SURGERY_MEDICATION_COUNT_KEY)
+    current_count = st.session_state.get(count_key, 0)
+    st.session_state[count_key] = max(0, current_count - 1)
+
+
 def render_medications(
     options: dict[str, list[str]],
     *,
@@ -968,24 +974,35 @@ def render_perioperative_monitoring(
             key=surgery_key(form_key, "bregma_lambda_dist_mm"),
         )
 
-        st.markdown("#### Medications")
-        st.caption(
-            "Press Add medication only if medications were given to the "
-            "subject."
-        )
-        if st.button(
-            "Add medication",
-            help="Add another medication entry.",
-            use_container_width=True,
-            key=surgery_key(form_key, "add_medication"),
-        ):
-            increment_medication_count(form_key)
-            st.rerun()
-        medications = render_medications(
-            options,
-            form_key=form_key,
-            values=mapping_list_default(defaults.get(MEDICATIONS_KEY)),
-        )
+    st.markdown("#### Medications")
+    st.caption(
+        "Press Add medication only if medications were given to the "
+        "subject."
+    )
+
+    if st.button(
+        "Add medication",
+        help="Add another medication entry.",
+        use_container_width=True,
+        key=surgery_key(form_key, "add_medication"),
+    ):
+        increment_medication_count(form_key)
+        st.rerun()
+
+    if st.button(
+        "Remove last medication",
+        help="Remove the last medication entry.",
+        use_container_width=True,
+        key=surgery_key(form_key, "remove_medication"),
+    ):
+        decrement_medication_count(form_key)
+        st.rerun()
+
+    medications = render_medications(
+        options,
+        form_key=form_key,
+        values=mapping_list_default(defaults.get(MEDICATIONS_KEY)),
+    )
 
     return {
         "weight_pre_g": weight_pre_g,
@@ -1000,6 +1017,12 @@ def render_perioperative_monitoring(
 def increment_procedure_count(form_key: str) -> None:
     count_key = surgery_count_key(form_key, SURGERY_PROCEDURE_COUNT_KEY)
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+
+
+def decrement_procedure_count(form_key: str) -> None:
+    count_key = surgery_count_key(form_key, SURGERY_PROCEDURE_COUNT_KEY)
+    current_count = st.session_state.get(count_key, 1)
+    st.session_state[count_key] = max(1, current_count - 1)
 
 
 def procedure_injection_count_key(
@@ -1041,9 +1064,21 @@ def increment_injection_count(form_key: str, procedure_index: int) -> None:
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
 
 
+def decrement_injection_count(form_key: str, procedure_index: int) -> None:
+    count_key = procedure_injection_count_key(form_key, procedure_index)
+    current_count = st.session_state.get(count_key, 1)
+    st.session_state[count_key] = max(1, current_count - 1)
+
+
 def increment_electrode_count(form_key: str, procedure_index: int) -> None:
     count_key = procedure_electrode_count_key(form_key, procedure_index)
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+
+
+def decrement_electrode_count(form_key: str, procedure_index: int) -> None:
+    count_key = procedure_electrode_count_key(form_key, procedure_index)
+    current_count = st.session_state.get(count_key, 1)
+    st.session_state[count_key] = max(1, current_count - 1)
 
 
 def increment_infusion_count(
@@ -1057,6 +1092,20 @@ def increment_infusion_count(
         injection_index,
     )
     st.session_state[count_key] = st.session_state.get(count_key, 1) + 1
+
+
+def decrement_infusion_count(
+    form_key: str,
+    procedure_index: int,
+    injection_index: int,
+) -> None:
+    count_key = injection_infusion_count_key(
+        form_key,
+        procedure_index,
+        injection_index,
+    )
+    current_count = st.session_state.get(count_key, 1)
+    st.session_state[count_key] = max(1, current_count - 1)
 
 
 def render_virus_attributes(
@@ -1157,6 +1206,17 @@ def render_infusions(
         use_container_width=True,
     ):
         increment_infusion_count(form_key, procedure_index, injection_index)
+        st.rerun()
+
+    if st.button(
+        "Remove last infusion location",
+        key=(
+            f"{form_key}_procedure_{procedure_index}_"
+            f"injection_{injection_index}_remove_infusion"
+        ),
+        use_container_width=True,
+    ):
+        decrement_infusion_count(form_key, procedure_index, injection_index)
         st.rerun()
 
     infusions: list[dict[str, object]] = []
@@ -1329,6 +1389,17 @@ def render_viral_injection_procedure(
         use_container_width=True,
     ):
         increment_injection_count(form_key, procedure_index)
+        st.rerun()
+
+    if st.button(
+        "Remove last injection",
+        key=surgery_key(
+            form_key,
+            f"procedure_{procedure_index}_remove_injection",
+        ),
+        use_container_width=True,
+    ):
+        decrement_injection_count(form_key, procedure_index)
         st.rerun()
 
     injections = [
@@ -1709,6 +1780,16 @@ def render_electrode_implant(
     ):
         increment_electrode_count(form_key, procedure_index)
         st.rerun()
+    if st.button(
+        "Remove last electrode",
+        key=surgery_key(
+            form_key,
+            f"procedure_{procedure_index}_remove_electrode",
+        ),
+        use_container_width=True,
+    ):
+        decrement_electrode_count(form_key, procedure_index)
+        st.rerun()
 
     return [
         render_electrode_object(
@@ -1804,6 +1885,14 @@ def render_surgical_procedures(
         use_container_width=True,
     ):
         increment_procedure_count(form_key)
+        st.rerun()
+
+    if st.button(
+        "Remove last surgical procedure",
+        key=surgery_key(form_key, "remove_procedure"),
+        use_container_width=True,
+    ):
+        decrement_procedure_count(form_key)
         st.rerun()
 
     procedures: list[dict[str, object]] = []
@@ -2545,7 +2634,7 @@ def main() -> None:
             return
 
         selected_subject_index = st.selectbox(
-            "Destination Subject",
+            "Subject",
             options=list(range(len(subject_records))),
             format_func=lambda index: subject_label(subject_records[index]),
             key="surgery_subject",
