@@ -170,6 +170,10 @@ SURGERY_TAKEN_PHOTO_SLOT_IDS_KEY = "surgery_taken_photo_slot_ids"
 SURGERY_TAKEN_PHOTO_NEXT_SLOT_ID_KEY = "surgery_taken_photo_next_slot_id"
 SURGERY_EDIT_MODE_KEY = "surgery_edit_existing"
 SURGERY_SELECTED_RECORD_KEY = "surgery_edit_record"
+
+SURGERY_COPY_MODE_KEY = "surgery_copy_existing"
+SURGERY_COPY_SOURCE_RECORD_KEY = "surgery_copy_source_record"
+
 SURGERY_CREATE_FORM_KEY = "surgery"
 
 ATTACHMENT_ACTION_PRESERVE = "Preserve existing"
@@ -313,6 +317,13 @@ def surgery_record_label(record: SurgeryRecord) -> str:
     ):
         label = f"{label} (incomplete)"
     return label
+
+
+def subject_surgery_record_label(
+    pair: tuple[SubjectRecord, SurgeryRecord],
+) -> str:
+    subject_record, surgery_record = pair
+    return f"{subject_label(subject_record)} | {surgery_record_label(surgery_record)}"
 
 
 def stable_key_part(value: str) -> str:
@@ -2191,6 +2202,20 @@ def load_surgery_records(page: Any) -> list[SurgeryRecord] | None:
         st.error(f"Unable to load surgery records from LabArchives: {exc}")
     return None
 
+def load_all_surgery_records(
+    subject_records: Sequence[SubjectRecord],
+) -> list[tuple[SubjectRecord, SurgeryRecord]] | None:
+    all_surgery_records: list[tuple[SubjectRecord, SurgeryRecord]] = []
+
+    for subject_record in subject_records:
+        surgery_records = load_surgery_records(subject_record.page)
+        if surgery_records is None:
+            return None
+
+        for surgery_record in surgery_records:
+            all_surgery_records.append((subject_record, surgery_record))
+
+    return all_surgery_records
 
 def render_surgery_form(
     *,
@@ -2200,12 +2225,33 @@ def render_surgery_form(
     investigator: str,
     selected_subject: SubjectRecord,
     existing_record: SurgeryRecord | None = None,
+    copied_payload: dict[str, Any] | None = None,
+    copy_source_key: str = "",
 ) -> None:
     subject_payload = selected_subject.payload
-    payload_defaults = existing_record.payload if existing_record else {}
+
+    payload_defaults = {}
+    if existing_record is not None:
+        payload_defaults = existing_record.payload
+    elif copied_payload is not None:
+        payload_defaults = copied_payload
+
+    is_copying = copied_payload is not None and existing_record is None
+
     form_key = SURGERY_CREATE_FORM_KEY
     if existing_record is not None:
         form_key = f"surgery_edit_{surgery_record_widget_key(existing_record)}"
+    elif copied_payload is not None:
+        form_key = f"surgery_copy_{copy_source_key or 'source'}"
+
+    if is_copying:
+        payload_defaults = dict(payload_defaults)
+        payload_defaults[SURGERY_DATE_KEY] = ""
+        payload_defaults[PREOP_CNN_KEY] = ""
+        payload_defaults[POSTOP_CNN_KEY] = ""
+        payload_defaults[SURGERY_DRAFT_ID_KEY] = ""
+        payload_defaults[ATTACHMENTS_KEY] = []
+
     existing_references = existing_attachment_references(payload_defaults)
     options = normalize_options(config.get(OPTIONS_KEY))
 
@@ -2473,10 +2519,20 @@ def main() -> None:
     st.subheader("Surgery")
     st.write(f"Project ID: {project[PROJECT_ID_KEY]}")
     st.write(f"Investigator: {investigator}")
+
     edit_existing = st.toggle(
         "Edit existing surgery record",
         key=SURGERY_EDIT_MODE_KEY,
     )
+
+    copy_existing = st.toggle(
+        "Copy values from existing surgery record",
+        key=SURGERY_COPY_MODE_KEY,
+        disabled=edit_existing,
+    )
+
+    if edit_existing and copy_existing:
+        copy_existing = False
 
     with st.expander("Subject Information", expanded=True):
         subject_records = load_subject_records(notebook, project)
@@ -2489,7 +2545,7 @@ def main() -> None:
             return
 
         selected_subject_index = st.selectbox(
-            "Subject",
+            "Destination Subject",
             options=list(range(len(subject_records))),
             format_func=lambda index: subject_label(subject_records[index]),
             key="surgery_subject",
@@ -2498,6 +2554,12 @@ def main() -> None:
         render_selected_subject(selected_subject)
 
     selected_surgery_record: SurgeryRecord | None = None
+    copied_surgery_payload: dict[str, Any] | None = None
+    copy_source_key = ""
+
+    # -------------------------
+    # Edit mode
+    # -------------------------
     if edit_existing:
         surgery_records = load_surgery_records(selected_subject.page)
         if surgery_records is None:
@@ -2518,6 +2580,37 @@ def main() -> None:
         )
         selected_surgery_record = surgery_records[selected_surgery_index]
 
+    # -------------------------
+    # Copy mode
+    # -------------------------
+    elif copy_existing:
+        all_surgery_records = load_all_surgery_records(subject_records)
+        if all_surgery_records is None:
+            return
+        if not all_surgery_records:
+            st.info("No surgery JSON records were found in any subject.")
+            return
+        selected_copy_index = st.selectbox(
+            "Source Surgery Record to Copy",
+            options=list(range(len(all_surgery_records))),
+            format_func=lambda index: subject_surgery_record_label(
+                all_surgery_records[index]
+            ),
+            key=SURGERY_COPY_SOURCE_RECORD_KEY,
+        )
+        st.info(
+            "The selected source surgery record will pre-fill the form. "
+            "Saving will create a new surgery record for the destination subject."
+        )
+        copy_source_subject, copy_source_record = all_surgery_records[
+            selected_copy_index
+        ]
+        copied_surgery_payload = copy_source_record.payload
+        copy_source_key = (
+            f"{subject_label(copy_source_subject)}_"
+            f"{surgery_record_widget_key(copy_source_record)}"
+        )
+
     render_surgery_form(
         notebook=notebook,
         config=config,
@@ -2525,6 +2618,8 @@ def main() -> None:
         investigator=investigator,
         selected_subject=selected_subject,
         existing_record=selected_surgery_record,
+        copied_payload=copied_surgery_payload,
+        copy_source_key=copy_source_key,
     )
 
 
