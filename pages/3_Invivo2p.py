@@ -29,7 +29,6 @@ from muronto_app.config import (
     INVIVO2P_SOFTWARE_NAME_OPTIONS_KEY,
     INVIVO2P_SYSTEM_ID_OPTIONS_KEY,
     LA_HOME_FOLDER_KEY,
-    OBJECTIVE_OPTIONS_KEY,
     OPTIONS_KEY,
     OTHER_CHOICE,
     PROJECT_ID_KEY,
@@ -142,6 +141,20 @@ from muronto_app.invivo2p import (
     WF_OPTO_POWER_MW_KEY,
     WF_OPTO_WAVELENGTH_NM_KEY,
     ZOOM_KEY,
+    NUM_CHANNELS_RECORDED_KEY,
+    CHANNEL_NUMBERS_RECORDED_KEY,
+    CHANNEL_NAMES_RECORDED_KEY,
+    OBJECTIVE_MAGNIFICATION_KEY,
+    OBJECTIVE_NA_KEY,
+    STAGE_X_KEY,
+    STAGE_Y_KEY,
+    Z_FOCUS_KEY,
+    PMT_GAIN_0_KEY,
+    PMT_GAIN_1_KEY,
+    PLANE_RELATIVE_DEPTHS_KEY,
+    FRAME_COUNT_TOTAL_KEY,
+    DURATION_S_KEY,
+    VOLUME_RATE_HZ_KEY,
     Invivo2pValidationError,
     build_invivo2p_payload,
     format_session_date,
@@ -864,6 +877,46 @@ def render_session_details(
     }
 
 
+def render_metadata_row(label: str, value: object, suffix: str = "") -> str:
+    if isinstance(value, list):
+        display_value = ", ".join(str(item) for item in value)
+    elif value in ("", None):
+        display_value = "—"
+    else:
+        display_value = str(value)
+
+    if display_value != "—" and suffix:
+        display_value = f"{display_value}{suffix}"
+
+    st.markdown(
+        f"""
+        <div style="display: grid; grid-template-columns: 180px 1fr; gap: 12px; margin: 2px 0;">
+            <div style="color: #666;">{label}</div>
+            <div><code>{display_value}</code></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    return "" if display_value == "—" else display_value.removesuffix(suffix)
+
+
+def render_metadata_section(
+    title: str,
+    rows: Sequence[tuple[str, str, str]],
+    metadata: Mapping[str, object],
+) -> dict[str, str]:
+    st.markdown(f"##### {title}")
+
+    values: dict[str, str] = {}
+    for label, key_name, suffix in rows:
+        raw_value = metadata.get(key_name, "")
+        values[key_name] = render_metadata_row(label, raw_value, suffix)
+
+    st.markdown("")
+    return values
+
+
 def render_imaging_settings(
     *,
     options: dict[str, list[str]],
@@ -871,6 +924,41 @@ def render_imaging_settings(
     defaults: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
     defaults = defaults or {}
+
+    xml_metadata = st.session_state.get(
+        invivo2p_key(form_key, INVIVO2P_XML_METADATA_KEY),
+        {},
+    )
+    if not isinstance(xml_metadata, Mapping):
+        xml_metadata = {}
+
+    metadata = {
+        key: xml_metadata.get(key, defaults.get(key, ""))
+        for key in (
+            NUM_CHANNELS_RECORDED_KEY,
+            CHANNEL_NUMBERS_RECORDED_KEY,
+            CHANNEL_NAMES_RECORDED_KEY,
+            OBJECTIVE_KEY,
+            OBJECTIVE_MAGNIFICATION_KEY,
+            OBJECTIVE_NA_KEY,
+            ZOOM_KEY,
+            IMAGING_LASER_WAVELENGTH_NM_KEY,
+            RESOLUTION_PIX_KEY,
+            FOV_SIZE_UM_KEY,
+            STAGE_X_KEY,
+            STAGE_Y_KEY,
+            Z_FOCUS_KEY,
+            IMAGING_LASER_POWER_MW_KEY,
+            PMT_GAIN_0_KEY,
+            PMT_GAIN_1_KEY,
+            NUM_PLANES_KEY,
+            PLANE_RELATIVE_DEPTHS_KEY,
+            FRAME_COUNT_TOTAL_KEY,
+            DURATION_S_KEY,
+            FRAME_RATE_HZ_KEY,
+            VOLUME_RATE_HZ_KEY,
+        )
+    }
 
     with st.expander("Imaging System & Settings", expanded=True):
         invivo2p_system_id = render_select_with_immediate_other(
@@ -897,69 +985,98 @@ def render_imaging_settings(
             other_prompt="New Behavior Rig",
             value=string_default(defaults, BEHAVIOR_RIG_KEY),
         )
-        objective = render_select_with_immediate_other(
-            label="Objective",
-            options=options,
-            options_key=OBJECTIVE_OPTIONS_KEY,
-            widget_key=invivo2p_key(form_key, "objective"),
-            other_prompt="New Objective",
-            value=string_default(defaults, OBJECTIVE_KEY),
+
+        st.divider()
+        st.markdown("### PrairieView Metadata")
+
+        metadata_values: dict[str, str] = {}
+
+        metadata_values.update(
+            render_metadata_section(
+                "Objective",
+                (
+                    ("Name", OBJECTIVE_KEY, ""),
+                    ("Magnification", OBJECTIVE_MAGNIFICATION_KEY, "×"),
+                    ("Numerical Aperture", OBJECTIVE_NA_KEY, ""),
+                ),
+                metadata,
+            )
         )
 
-        imaging_laser_wavelength_nm = st.number_input(
-            "Imaging Laser Wavelength (nm)",
-            min_value=0.0,
-            value=number_default(defaults.get(IMAGING_LASER_WAVELENGTH_NM_KEY)),
-            step=1.0,
-            key=invivo2p_key(form_key, "imaging_laser_wavelength_nm"),
+        metadata_values.update(
+            render_metadata_section(
+                "Imaging",
+                (
+                    ("Zoom", ZOOM_KEY, ""),
+                    (
+                        "Laser Wavelength",
+                        IMAGING_LASER_WAVELENGTH_NM_KEY,
+                        " nm",
+                    ),
+                    ("Laser Power", IMAGING_LASER_POWER_MW_KEY, " mW"),
+                    ("FOV Size", FOV_SIZE_UM_KEY, " µm"),
+                ),
+                metadata,
+            )
         )
-        imaging_laser_power_mw = st.number_input(
-            "Imaging Laser Power (mW)",
-            min_value=0.0,
-            value=number_default(defaults.get(IMAGING_LASER_POWER_MW_KEY)),
-            step=1.0,
-            key=invivo2p_key(form_key, "imaging_laser_power_mw"),
+
+        metadata_values.update(
+            render_metadata_section(
+                "Acquisition",
+                (
+                    ("Resolution", RESOLUTION_PIX_KEY, ""),
+                    ("Frame Rate", FRAME_RATE_HZ_KEY, " Hz"),
+                    ("Volume Rate", VOLUME_RATE_HZ_KEY, " Hz"),
+                    ("Duration", DURATION_S_KEY, " s"),
+                    ("Frame Count", FRAME_COUNT_TOTAL_KEY, ""),
+                    ("Num Planes", NUM_PLANES_KEY, ""),
+                    ("Plane Depths", PLANE_RELATIVE_DEPTHS_KEY, " µm"),
+                ),
+                metadata,
+            )
         )
-        frame_rate_hz = st.number_input(
-            "Frame Rate (Hz)",
-            min_value=0.0,
-            value=number_default(defaults.get(FRAME_RATE_HZ_KEY)),
-            step=1.0,
-            key=invivo2p_key(form_key, "frame_rate_hz"),
+
+        metadata_values.update(
+            render_metadata_section(
+                "Channels",
+                (
+                    ("Number Recorded", NUM_CHANNELS_RECORDED_KEY, ""),
+                    ("Channel Numbers", CHANNEL_NUMBERS_RECORDED_KEY, ""),
+                    ("Channel Names", CHANNEL_NAMES_RECORDED_KEY, ""),
+                ),
+                metadata,
+            )
         )
-        zoom = st.number_input(
-            "Zoom",
-            min_value=0.0,
-            value=number_default(defaults.get(ZOOM_KEY)),
-            step=0.1,
-            key=invivo2p_key(form_key, "zoom"),
+
+        metadata_values.update(
+            render_metadata_section(
+                "Stage",
+                (
+                    ("X", STAGE_X_KEY, ""),
+                    ("Y", STAGE_Y_KEY, ""),
+                    ("Z Focus", Z_FOCUS_KEY, ""),
+                ),
+                metadata,
+            )
         )
-        resolution_pix = st.text_input(
-            "Resolution (pixels)",
-            key=invivo2p_key(form_key, "resolution_pix"),
-            value=string_default(defaults, RESOLUTION_PIX_KEY),
-            placeholder="512x512",
-        )
-        fov_size_um = st.text_input(
-            "FOV Size (um)",
-            key=invivo2p_key(form_key, "fov_size_um"),
-            value=string_default(defaults, FOV_SIZE_UM_KEY),
-            placeholder="500x500",
+
+        metadata_values.update(
+            render_metadata_section(
+                "PMTs",
+                (
+                    ("PMT 0 Gain", PMT_GAIN_0_KEY, ""),
+                    ("PMT 1 Gain", PMT_GAIN_1_KEY, ""),
+                ),
+                metadata,
+            )
         )
 
     return {
         INVIVO2P_SYSTEM_ID_KEY: invivo2p_system_id,
         INVIVO2P_SOFTWARE_NAME_KEY: invivo2p_software_name,
         BEHAVIOR_RIG_KEY: behavior_rig,
-        OBJECTIVE_KEY: objective,
-        IMAGING_LASER_WAVELENGTH_NM_KEY: imaging_laser_wavelength_nm,
-        IMAGING_LASER_POWER_MW_KEY: imaging_laser_power_mw,
-        FRAME_RATE_HZ_KEY: frame_rate_hz,
-        ZOOM_KEY: zoom,
-        RESOLUTION_PIX_KEY: resolution_pix,
-        FOV_SIZE_UM_KEY: fov_size_um,
+        **metadata_values,
     }
-
 
 def render_channel_settings(
     *,
@@ -1514,6 +1631,80 @@ def render_raw_data_paths(
 
 
 def render_prairieview_xml_import(*, form_key: str) -> dict[str, Any]:
+    def metadata_value(metadata: Mapping[str, Any], key: str) -> object:
+        value = metadata.get(key, "")
+        return "" if value is None else value
+
+    def metadata_text(metadata: Mapping[str, Any], key: str) -> str:
+        value = metadata_value(metadata, key)
+        if isinstance(value, list):
+            return ", ".join(str(item) for item in value)
+        return clean_string(value)
+
+    def prairieview_to_muronto_metadata(
+        metadata: Mapping[str, Any],
+    ) -> dict[str, object]:
+        return {
+            NUM_CHANNELS_RECORDED_KEY: metadata_value(
+                metadata,
+                "num_channels_recorded",
+            ),
+            CHANNEL_NUMBERS_RECORDED_KEY: metadata_text(
+                metadata,
+                "channel_numbers_recorded",
+            ),
+            CHANNEL_NAMES_RECORDED_KEY: metadata_text(
+                metadata,
+                "channel_names_recorded",
+            ),
+            OBJECTIVE_KEY: metadata_value(metadata, "objective_name"),
+            OBJECTIVE_MAGNIFICATION_KEY: metadata_value(
+                metadata,
+                "objective_magnification",
+            ),
+            OBJECTIVE_NA_KEY: metadata_value(metadata, "objective_na"),
+            ZOOM_KEY: metadata_value(metadata, "optical_zoom"),
+            IMAGING_LASER_WAVELENGTH_NM_KEY: metadata_value(
+                metadata,
+                "laser_wavelength_nm",
+            ),
+            RESOLUTION_PIX_KEY: metadata_value(
+                metadata,
+                "resolution_pix",
+            ),
+            FOV_SIZE_UM_KEY: metadata_value(
+                metadata,
+                "fov_size_um",
+            ),
+            STAGE_X_KEY: metadata_value(metadata, "stage_x"),
+            STAGE_Y_KEY: metadata_value(metadata, "stage_y"),
+            Z_FOCUS_KEY: metadata_value(metadata, "z_focus"),
+            IMAGING_LASER_POWER_MW_KEY: metadata_value(
+                metadata,
+                "laser_power_0",
+            ),
+            PMT_GAIN_0_KEY: metadata_value(metadata, "pmt_gain_0"),
+            PMT_GAIN_1_KEY: metadata_value(metadata, "pmt_gain_1"),
+            NUM_PLANES_KEY: metadata_value(metadata, "num_planes_inferred"),
+            PLANE_RELATIVE_DEPTHS_KEY: metadata_text(
+                metadata,
+                "plane_relative_depths",
+            ),
+            FRAME_COUNT_TOTAL_KEY: metadata_value(
+                metadata,
+                "frame_count_total",
+            ),
+            DURATION_S_KEY: metadata_value(metadata, "duration_s"),
+            FRAME_RATE_HZ_KEY: metadata_value(
+                metadata,
+                "frame_rate_actual_hz",
+            ),
+            VOLUME_RATE_HZ_KEY: metadata_value(
+                metadata,
+                "volume_rate_hz",
+            ),
+        }
+
     with st.expander("PrairieView XML Metadata Import", expanded=False):
         uploaded_xml = st.file_uploader(
             "PrairieView XML file",
@@ -1531,33 +1722,28 @@ def render_prairieview_xml_import(*, form_key: str) -> dict[str, Any]:
             return {}
 
         metadata = parsed.get("metadata", {})
+        if not isinstance(metadata, Mapping):
+            st.error("Parsed PrairieView XML did not contain metadata.")
+            return {}
+
+        muronto_metadata = prairieview_to_muronto_metadata(metadata)
+
         st.success("Parsed PrairieView XML.")
 
-        laser_wavelength = metadata.get("laser_wavelength_nm", "")
-        optical_zoom = metadata.get("optical_zoom", "")
-
-        st.write(f"Detected laser wavelength: `{laser_wavelength}` nm")
-        st.write(f"Detected zoom: `{optical_zoom}`")
+        with st.expander("Preview mapped XML metadata", expanded=True):
+            st.json(muronto_metadata)
 
         if st.button(
             "Apply XML metadata to record",
             key=invivo2p_key(form_key, "apply_xml_metadata"),
             use_container_width=True,
         ):
-            if laser_wavelength not in ("", None):
-                st.session_state[
-                    invivo2p_key(form_key, "imaging_laser_wavelength_nm")
-                ] = float(laser_wavelength)
-
-            if optical_zoom not in ("", None):
-                st.session_state[
-                    invivo2p_key(form_key, "zoom")
-                ] = float(optical_zoom)
-
-            st.session_state[INVIVO2P_XML_METADATA_KEY] = metadata
+            st.session_state[
+                invivo2p_key(form_key, INVIVO2P_XML_METADATA_KEY)
+            ] = muronto_metadata
             st.rerun()
 
-        return metadata
+        return muronto_metadata
 
 
 def render_invivo2p_form(
@@ -1599,6 +1785,36 @@ def render_invivo2p_form(
         payload_defaults[RAW_2P_IMAGING_METADATA_PATH_KEY] = ""
         payload_defaults[RAW_2P_SYNC_DATA_PATH_KEY] = ""
         payload_defaults[RAW_2P_SYNC_METADATA_PATH_KEY] = ""
+    
+    xml_metadata_state_key = invivo2p_key(form_key, INVIVO2P_XML_METADATA_KEY)
+    if xml_metadata_state_key not in st.session_state:
+        st.session_state[xml_metadata_state_key] = {
+            key: payload_defaults.get(key, "")
+            for key in (
+                NUM_CHANNELS_RECORDED_KEY,
+                CHANNEL_NUMBERS_RECORDED_KEY,
+                CHANNEL_NAMES_RECORDED_KEY,
+                OBJECTIVE_KEY,
+                OBJECTIVE_MAGNIFICATION_KEY,
+                OBJECTIVE_NA_KEY,
+                ZOOM_KEY,
+                IMAGING_LASER_WAVELENGTH_NM_KEY,
+                RESOLUTION_PIX_KEY,
+                FOV_SIZE_UM_KEY,
+                STAGE_X_KEY,
+                STAGE_Y_KEY,
+                Z_FOCUS_KEY,
+                IMAGING_LASER_POWER_MW_KEY,
+                PMT_GAIN_0_KEY,
+                PMT_GAIN_1_KEY,
+                NUM_PLANES_KEY,
+                PLANE_RELATIVE_DEPTHS_KEY,
+                FRAME_COUNT_TOTAL_KEY,
+                DURATION_S_KEY,
+                FRAME_RATE_HZ_KEY,
+                VOLUME_RATE_HZ_KEY,
+            )
+        }
 
     existing_references = existing_attachment_references(payload_defaults)
     options = normalize_options(config.get(OPTIONS_KEY))
@@ -1699,18 +1915,11 @@ def render_invivo2p_form(
                 imaging_values[INVIVO2P_SOFTWARE_NAME_KEY]
             ),
             behavior_rig=clean_string(imaging_values[BEHAVIOR_RIG_KEY]),
-            objective=clean_string(imaging_values[OBJECTIVE_KEY]),
-            imaging_laser_wavelength_nm=imaging_values[
-                IMAGING_LASER_WAVELENGTH_NM_KEY
-            ],
-            imaging_laser_power_mw=imaging_values[
-                IMAGING_LASER_POWER_MW_KEY
-            ],
-            frame_rate_hz=imaging_values[FRAME_RATE_HZ_KEY],
-            zoom=imaging_values[ZOOM_KEY],
-            resolution_pix=clean_string(imaging_values[RESOLUTION_PIX_KEY]),
-            fov_size_um=clean_string(imaging_values[FOV_SIZE_UM_KEY]),
             channel=clean_string(channel_values[CHANNEL_KEY]),
+            xml_metadata_values=st.session_state.get(
+                invivo2p_key(form_key, INVIVO2P_XML_METADATA_KEY),
+                imaging_values,
+            ),
             green_construct=clean_string(channel_values[GREEN_CONSTRUCT_KEY]),
             red_construct=clean_string(channel_values[RED_CONSTRUCT_KEY]),
             green_channel_substrate=clean_string(
