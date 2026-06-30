@@ -104,18 +104,6 @@ FRAME_RATE_HZ_KEY: Final[str] = "frame_rate_hz"
 VOLUME_RATE_HZ_KEY: Final[str] = "volume_rate_hz"
 
 # ------------------------------------------------------------------
-# Optogenetics
-# ------------------------------------------------------------------
-
-WF_OPTO_WAVELENGTH_NM_KEY: Final[str] = "wf_opto_wavelength_nm"
-WF_OPTO_POWER_MW_KEY: Final[str] = "wf_opto_power_mw"
-WF_OPTO_MODE_KEY: Final[str] = "wf_opto_mode"
-
-SLM_OPTO_WAVELENGTH_NM_KEY: Final[str] = "slm_opto_wavelength_nm"
-SLM_OPTO_POWER_MW_KEY: Final[str] = "slm_opto_power_mw"
-SLM_OPTO_MODE_KEY: Final[str] = "slm_opto_mode"
-
-# ------------------------------------------------------------------
 # Sensory stimulation
 # ------------------------------------------------------------------
 
@@ -817,87 +805,6 @@ def _validate_channel_fields(
     }
 
 
-def _validate_opto_fields(
-    raw_payload: Mapping[str, object],
-    *,
-    session_type: str,
-    errors: list[str],
-    allow_incomplete: bool = False,
-) -> dict[str, str | float | None]:
-    wf_opto_wavelength_nm = _validate_optional_non_negative_number(
-        field_name=WF_OPTO_WAVELENGTH_NM_KEY,
-        value=raw_payload.get(WF_OPTO_WAVELENGTH_NM_KEY),
-        errors=errors,
-    )
-    wf_opto_power_mw = _validate_optional_non_negative_number(
-        field_name=WF_OPTO_POWER_MW_KEY,
-        value=raw_payload.get(WF_OPTO_POWER_MW_KEY),
-        errors=errors,
-    )
-    wf_opto_mode = clean_string(raw_payload.get(WF_OPTO_MODE_KEY))
-
-    slm_opto_wavelength_nm = _validate_optional_non_negative_number(
-        field_name=SLM_OPTO_WAVELENGTH_NM_KEY,
-        value=raw_payload.get(SLM_OPTO_WAVELENGTH_NM_KEY),
-        errors=errors,
-    )
-    slm_opto_power_mw = _validate_optional_non_negative_number(
-        field_name=SLM_OPTO_POWER_MW_KEY,
-        value=raw_payload.get(SLM_OPTO_POWER_MW_KEY),
-        errors=errors,
-    )
-    slm_opto_mode = clean_string(raw_payload.get(SLM_OPTO_MODE_KEY))
-
-    if session_type == "2P Imaging + WF Opto":
-        if wf_opto_mode not in WF_OPTO_MODE_OPTIONS:
-            errors.append(
-                f"{WF_OPTO_MODE_KEY} must be one of "
-                + ", ".join(WF_OPTO_MODE_OPTIONS)
-                + "."
-            )
-        _validate_non_negative_number(
-            field_name=WF_OPTO_WAVELENGTH_NM_KEY,
-            value=raw_payload.get(WF_OPTO_WAVELENGTH_NM_KEY),
-            errors=errors,
-            allow_incomplete=allow_incomplete,
-        )
-        _validate_non_negative_number(
-            field_name=WF_OPTO_POWER_MW_KEY,
-            value=raw_payload.get(WF_OPTO_POWER_MW_KEY),
-            errors=errors,
-            allow_incomplete=allow_incomplete,
-        )
-
-    if session_type == "2P Imaging + SLM Opto":
-        if slm_opto_mode not in SLM_OPTO_MODE_OPTIONS:
-            errors.append(
-                f"{SLM_OPTO_MODE_KEY} must be one of "
-                + ", ".join(SLM_OPTO_MODE_OPTIONS)
-                + "."
-            )
-        _validate_non_negative_number(
-            field_name=SLM_OPTO_WAVELENGTH_NM_KEY,
-            value=raw_payload.get(SLM_OPTO_WAVELENGTH_NM_KEY),
-            errors=errors,
-            allow_incomplete=allow_incomplete,
-        )
-        _validate_non_negative_number(
-            field_name=SLM_OPTO_POWER_MW_KEY,
-            value=raw_payload.get(SLM_OPTO_POWER_MW_KEY),
-            errors=errors,
-            allow_incomplete=allow_incomplete,
-        )
-
-    return {
-        WF_OPTO_WAVELENGTH_NM_KEY: wf_opto_wavelength_nm,
-        WF_OPTO_POWER_MW_KEY: wf_opto_power_mw,
-        WF_OPTO_MODE_KEY: wf_opto_mode,
-        SLM_OPTO_WAVELENGTH_NM_KEY: slm_opto_wavelength_nm,
-        SLM_OPTO_POWER_MW_KEY: slm_opto_power_mw,
-        SLM_OPTO_MODE_KEY: slm_opto_mode,
-    }
-
-
 def build_invivo2p_payload(
     *,
     project_id: str,
@@ -920,12 +827,6 @@ def build_invivo2p_payload(
     red_construct: str = "",
     green_channel_substrate: str = "",
     red_channel_substrate: str = "",
-    wf_opto_wavelength_nm: int | float | None = None,
-    wf_opto_power_mw: int | float | None = None,
-    wf_opto_mode: str = "",
-    slm_opto_wavelength_nm: int | float | None = None,
-    slm_opto_power_mw: int | float | None = None,
-    slm_opto_mode: str = "",
     num_fovs: int | None = None,
     fovs: object = (),
     sensory_stimuli: object = (),
@@ -1027,20 +928,6 @@ def build_invivo2p_payload(
         errors,
     )
 
-    opto_fields = _validate_opto_fields(
-        {
-            WF_OPTO_WAVELENGTH_NM_KEY: wf_opto_wavelength_nm,
-            WF_OPTO_POWER_MW_KEY: wf_opto_power_mw,
-            WF_OPTO_MODE_KEY: wf_opto_mode,
-            SLM_OPTO_WAVELENGTH_NM_KEY: slm_opto_wavelength_nm,
-            SLM_OPTO_POWER_MW_KEY: slm_opto_power_mw,
-            SLM_OPTO_MODE_KEY: slm_opto_mode,
-        },
-        session_type=cleaned_session_type,
-        errors=errors,
-        allow_incomplete=allow_incomplete,
-    )
-
     cleaned_fovs = _validate_fovs(
         fovs,
         errors,
@@ -1089,7 +976,6 @@ def build_invivo2p_payload(
         BEHAVIOR_RIG_KEY: cleaned_behavior_rig,
         **clean_xml_metadata_values(xml_metadata_values),
         **channel_fields,
-        **opto_fields,
         NUM_FOVS_KEY: cleaned_num_fovs,
         FOVS_KEY: cleaned_fovs,
         SENSORY_STIMULI_KEY: cleaned_sensory_stimuli,

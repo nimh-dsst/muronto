@@ -126,20 +126,12 @@ from muronto_app.invivo2p import (
     SESSION_DATE_KEY,
     SESSION_ID_KEY,
     SESSION_TYPE_KEY,
-    SLM_OPTO_MODE_KEY,
-    SLM_OPTO_MODE_OPTIONS,
-    SLM_OPTO_POWER_MW_KEY,
-    SLM_OPTO_WAVELENGTH_NM_KEY,
     START_TIME_KEY,
     STIMULUS_DURATION_MS_KEY,
     STIMULUS_FREQUENCY_HZ_KEY,
     STIMULUS_NOTES_KEY,
     STIMULUS_REPETITION_KEY,
     TAKEN_PHOTO_UPLOAD_TYPE,
-    WF_OPTO_MODE_KEY,
-    WF_OPTO_MODE_OPTIONS,
-    WF_OPTO_POWER_MW_KEY,
-    WF_OPTO_WAVELENGTH_NM_KEY,
     ZOOM_KEY,
     NUM_CHANNELS_RECORDED_KEY,
     CHANNEL_NUMBERS_RECORDED_KEY,
@@ -1146,85 +1138,6 @@ def render_channel_settings(
     }
 
 
-def render_opto_settings(
-    *,
-    session_type: str,
-    form_key: str,
-    defaults: Mapping[str, Any] | None = None,
-) -> dict[str, object]:
-    defaults = defaults or {}
-
-    with st.expander("Opto Settings", expanded=session_type != "2P Imaging"):
-        wf_opto_wavelength_nm = None
-        wf_opto_power_mw = None
-        wf_opto_mode = ""
-        slm_opto_wavelength_nm = None
-        slm_opto_power_mw = None
-        slm_opto_mode = ""
-
-        if session_type == "2P Imaging + WF Opto":
-            wf_opto_wavelength_nm = st.number_input(
-                "WF Opto Wavelength (nm)",
-                min_value=0.0,
-                value=number_default(defaults.get(WF_OPTO_WAVELENGTH_NM_KEY)),
-                step=1.0,
-                key=invivo2p_key(form_key, "wf_opto_wavelength_nm"),
-            )
-            wf_opto_power_mw = st.number_input(
-                "WF Opto Power (mW)",
-                min_value=0.0,
-                value=number_default(defaults.get(WF_OPTO_POWER_MW_KEY)),
-                step=1.0,
-                key=invivo2p_key(form_key, "wf_opto_power_mw"),
-            )
-            wf_opto_mode = st.selectbox(
-                "WF Opto Mode",
-                options=WF_OPTO_MODE_OPTIONS,
-                key=invivo2p_key(form_key, "wf_opto_mode"),
-                index=selected_index(
-                    WF_OPTO_MODE_OPTIONS,
-                    defaults.get(WF_OPTO_MODE_KEY),
-                ),
-            )
-
-        elif session_type == "2P Imaging + SLM Opto":
-            slm_opto_wavelength_nm = st.number_input(
-                "SLM Opto Wavelength (nm)",
-                min_value=0.0,
-                value=number_default(defaults.get(SLM_OPTO_WAVELENGTH_NM_KEY)),
-                step=1.0,
-                key=invivo2p_key(form_key, "slm_opto_wavelength_nm"),
-            )
-            slm_opto_power_mw = st.number_input(
-                "SLM Opto Power (mW)",
-                min_value=0.0,
-                value=number_default(defaults.get(SLM_OPTO_POWER_MW_KEY)),
-                step=1.0,
-                key=invivo2p_key(form_key, "slm_opto_power_mw"),
-            )
-            slm_opto_mode = st.selectbox(
-                "SLM Opto Mode",
-                options=SLM_OPTO_MODE_OPTIONS,
-                key=invivo2p_key(form_key, "slm_opto_mode"),
-                index=selected_index(
-                    SLM_OPTO_MODE_OPTIONS,
-                    defaults.get(SLM_OPTO_MODE_KEY),
-                ),
-            )
-
-        else:
-            st.caption("No optogenetic stimulation for this session type.")
-
-    return {
-        WF_OPTO_WAVELENGTH_NM_KEY: wf_opto_wavelength_nm,
-        WF_OPTO_POWER_MW_KEY: wf_opto_power_mw,
-        WF_OPTO_MODE_KEY: wf_opto_mode,
-        SLM_OPTO_WAVELENGTH_NM_KEY: slm_opto_wavelength_nm,
-        SLM_OPTO_POWER_MW_KEY: slm_opto_power_mw,
-        SLM_OPTO_MODE_KEY: slm_opto_mode,
-    }
-
-
 def fov_plane_count_key(form_key: str, fov_index: int) -> str:
     return invivo2p_key(form_key, f"fov_{fov_index}_plane_count")
 
@@ -1837,11 +1750,6 @@ def render_invivo2p_form(
         form_key=form_key,
         defaults=payload_defaults,
     )
-    opto_values = render_opto_settings(
-        session_type=clean_string(session_values[SESSION_TYPE_KEY]),
-        form_key=form_key,
-        defaults=payload_defaults,
-    )
     num_fovs, fovs = render_fovs(
         options=options,
         notebook=notebook,
@@ -1928,12 +1836,6 @@ def render_invivo2p_form(
             red_channel_substrate=clean_string(
                 channel_values[RED_CHANNEL_SUBSTRATE_KEY]
             ),
-            wf_opto_wavelength_nm=opto_values[WF_OPTO_WAVELENGTH_NM_KEY],
-            wf_opto_power_mw=opto_values[WF_OPTO_POWER_MW_KEY],
-            wf_opto_mode=clean_string(opto_values[WF_OPTO_MODE_KEY]),
-            slm_opto_wavelength_nm=opto_values[SLM_OPTO_WAVELENGTH_NM_KEY],
-            slm_opto_power_mw=opto_values[SLM_OPTO_POWER_MW_KEY],
-            slm_opto_mode=clean_string(opto_values[SLM_OPTO_MODE_KEY]),
             num_fovs=num_fovs,
             fovs=fovs,
             sensory_stimuli=sensory_stimuli,
