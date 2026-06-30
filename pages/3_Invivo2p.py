@@ -114,6 +114,7 @@ from muronto_app.invivo2p import (
     PHOTO_UPLOAD_TYPE,
     PLANE_NUMBER_KEY,
     PLANES_KEY,
+    PRAIRIEVIEW_VERSION_KEY,
     RAW_2P_IMAGING_DATA_PATH_KEY,
     RAW_2P_IMAGING_METADATA_PATH_KEY,
     RAW_2P_SYNC_DATA_PATH_KEY,
@@ -927,6 +928,7 @@ def render_imaging_settings(
     metadata = {
         key: xml_metadata.get(key, defaults.get(key, ""))
         for key in (
+            PRAIRIEVIEW_VERSION_KEY,
             NUM_CHANNELS_RECORDED_KEY,
             CHANNEL_NUMBERS_RECORDED_KEY,
             CHANNEL_NAMES_RECORDED_KEY,
@@ -982,6 +984,16 @@ def render_imaging_settings(
         st.markdown("### PrairieView Metadata")
 
         metadata_values: dict[str, str] = {}
+
+        metadata_values.update(
+            render_metadata_section(
+                "Software",
+                (
+                    ("PrairieView Version", PRAIRIEVIEW_VERSION_KEY, ""),
+                ),
+                metadata,
+            )
+        )
 
         metadata_values.update(
             render_metadata_section(
@@ -1558,6 +1570,7 @@ def render_prairieview_xml_import(*, form_key: str) -> dict[str, Any]:
         metadata: Mapping[str, Any],
     ) -> dict[str, object]:
         return {
+            PRAIRIEVIEW_VERSION_KEY: metadata_value(metadata, "pv_version"),
             NUM_CHANNELS_RECORDED_KEY: metadata_value(
                 metadata,
                 "num_channels_recorded",
@@ -1704,6 +1717,7 @@ def render_invivo2p_form(
         st.session_state[xml_metadata_state_key] = {
             key: payload_defaults.get(key, "")
             for key in (
+                PRAIRIEVIEW_VERSION_KEY,
                 NUM_CHANNELS_RECORDED_KEY,
                 CHANNEL_NUMBERS_RECORDED_KEY,
                 CHANNEL_NAMES_RECORDED_KEY,

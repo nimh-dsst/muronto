@@ -69,6 +69,8 @@ END_TIME_KEY: Final[str] = "end_time"
 # Imaging system / acquisition metadata
 # ------------------------------------------------------------------
 
+PRAIRIEVIEW_VERSION_KEY: Final[str] = "prairieview_version"
+
 INVIVO2P_SYSTEM_ID_KEY: Final[str] = "invivo2p_system_id"
 INVIVO2P_SOFTWARE_NAME_KEY: Final[str] = "invivo2p_software_name"
 BEHAVIOR_RIG_KEY: Final[str] = "behavior_rig"
@@ -225,6 +227,7 @@ SLM_OPTO_MODE_OPTIONS: Final[tuple[str, ...]] = (
 )
 
 INVIVO2P_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
+    PRAIRIEVIEW_VERSION_KEY,
     NUM_CHANNELS_RECORDED_KEY,
     CHANNEL_NUMBERS_RECORDED_KEY,
     CHANNEL_NAMES_RECORDED_KEY,
