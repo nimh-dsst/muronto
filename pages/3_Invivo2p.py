@@ -13,6 +13,10 @@ from muronto_app.prairieview_xml_metadata_auditor import (
     parse_prairieview_xml_bytes,
 )
 
+from muronto_app.voltage_xml_metadata_auditor import (
+    parse_voltage_xml_bytes,
+)
+
 from muronto_app.config import (
     BEHAVIOR_RIG_OPTIONS_KEY,
     BEHAVIOR_TASK_NAME_OPTIONS_KEY,
@@ -133,6 +137,15 @@ from muronto_app.invivo2p import (
     STIMULUS_REPETITION_KEY,
     TAKEN_PHOTO_UPLOAD_TYPE,
     TSERIES_XML_FILENAME_KEY,
+    VOLTAGE_DATA_FILE_KEY,
+    VOLTAGE_EXPERIMENT_NAME_KEY,
+    VOLTAGE_SAMPLES_ACQUIRED_KEY,
+    VOLTAGE_SAMPLING_RATE_HZ_KEY,
+    VOLTAGE_DURATION_S_KEY,
+    VOLTAGE_ACQUISITION_TIME_CONFIGURED_S_KEY,
+    VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
+    VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
+    VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
     ZOOM_KEY,
     NUM_CHANNELS_RECORDED_KEY,
     CHANNEL_NUMBERS_RECORDED_KEY,
@@ -164,6 +177,7 @@ from muronto_app.invivo2p import (
 # ------------------------------------------------------------------
 
 INVIVO2P_TSERIES_XML_METADATA_KEY = "invivo2p_tseries_xml_metadata"
+INVIVO2P_VOLTAGE_XML_METADATA_KEY = "invivo2p_voltage_xml_metadata"
 
 COMMON_BEHAVIOR_TASK_PHASE_OPTIONS = (
     "Habituation",
@@ -1664,7 +1678,7 @@ def render_prairieview_tseries_xml_import(*, form_key: str) -> dict[str, Any]:
             ),
         }
 
-    with st.expander("PrairieView TSeries XML Metadata Import", expanded=False):
+    with st.expander("PrairieView TSeries XML Metadata Import", expanded=True):
         uploaded_tseries_xml = st.file_uploader(
             "PrairieView TSeries XML file",
             type=["xml"],
@@ -1709,6 +1723,187 @@ def render_prairieview_tseries_xml_import(*, form_key: str) -> dict[str, Any]:
         return muronto_tseries_metadata
 
 
+
+def render_prairieview_voltage_xml_import(*, form_key: str) -> dict[str, Any]:
+    def metadata_value(voltage_metadata: Mapping[str, Any], key: str) -> object:
+        value = voltage_metadata.get(key, "")
+        return "" if value is None else value
+
+    def prairieview_voltage_to_muronto_metadata(
+        voltage_metadata: Mapping[str, Any],
+    ) -> dict[str, object]:
+        return {
+            VOLTAGE_DATA_FILE_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_data_file",
+            ),
+            VOLTAGE_EXPERIMENT_NAME_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_experiment_name",
+            ),
+            VOLTAGE_SAMPLES_ACQUIRED_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_samples_acquired",
+            ),
+            VOLTAGE_SAMPLING_RATE_HZ_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_sampling_rate_hz",
+            ),
+            VOLTAGE_DURATION_S_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_duration_s",
+            ),
+            VOLTAGE_ACQUISITION_TIME_CONFIGURED_S_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_acquisition_time_configured_s",
+            ),
+            VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_duration_matches_configured",
+            ),
+            VOLTAGE_CHANNEL_NUMBERS_ALL_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_channel_numbers_all",
+            ),
+            VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_enabled_channel_numbers",
+            ),
+        }
+
+    with st.expander(
+        "PrairieView Voltage XML Metadata Import",
+        expanded=True,
+    ):
+        uploaded_voltage_xml = st.file_uploader(
+            "PrairieView Voltage XML file",
+            type=["xml"],
+            key=invivo2p_key(form_key, "prairieview_voltage_xml_upload"),
+        )
+
+        if uploaded_voltage_xml is None:
+            return {}
+
+        try:
+            parsed_voltage = parse_voltage_xml_bytes(
+                uploaded_voltage_xml.getvalue()
+            )
+        except Exception as exc:
+            st.error(
+                f"Unable to parse PrairieView Voltage XML: {exc}"
+            )
+            return {}
+
+        voltage_metadata = parsed_voltage.get("metadata", {})
+        if not isinstance(voltage_metadata, Mapping):
+            st.error(
+                "Parsed PrairieView Voltage XML did not contain metadata."
+            )
+            return {}
+
+        muronto_voltage_metadata = prairieview_voltage_to_muronto_metadata(
+            voltage_metadata
+        )
+
+        st.success("Parsed PrairieView Voltage XML.")
+
+        with st.expander(
+            "Preview mapped Voltage XML metadata",
+            expanded=True,
+        ):
+            st.json(muronto_voltage_metadata)
+
+        if st.button(
+            "Apply Voltage XML metadata to record",
+            key=invivo2p_key(form_key, "apply_voltage_xml_metadata"),
+            use_container_width=True,
+        ):
+            st.session_state[
+                invivo2p_key(form_key, INVIVO2P_VOLTAGE_XML_METADATA_KEY)
+            ] = muronto_voltage_metadata
+            st.rerun()
+
+        return muronto_voltage_metadata
+
+
+
+def render_prairieview_voltage_metadata_display(
+    *,
+    form_key: str,
+    defaults: Mapping[str, Any] | None = None,
+) -> dict[str, object]:
+    defaults = defaults or {}
+
+    voltage_metadata = st.session_state.get(
+        invivo2p_key(form_key, INVIVO2P_VOLTAGE_XML_METADATA_KEY),
+        {},
+    )
+    if not isinstance(voltage_metadata, Mapping):
+        voltage_metadata = {}
+
+    displayed_voltage_metadata = {
+        key: voltage_metadata.get(key, defaults.get(key, ""))
+        for key in (
+            VOLTAGE_DATA_FILE_KEY,
+            VOLTAGE_EXPERIMENT_NAME_KEY,
+            VOLTAGE_SAMPLES_ACQUIRED_KEY,
+            VOLTAGE_SAMPLING_RATE_HZ_KEY,
+            VOLTAGE_DURATION_S_KEY,
+            VOLTAGE_ACQUISITION_TIME_CONFIGURED_S_KEY,
+            VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
+            VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
+            VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+        )
+    }
+
+    metadata_values: dict[str, str] = {}
+
+    metadata_values.update(
+        render_metadata_section(
+            "Voltage Recording",
+            (
+                ("File Name", VOLTAGE_DATA_FILE_KEY, ""),
+                ("Voltage Exp Name", VOLTAGE_EXPERIMENT_NAME_KEY, ""),
+                ("Voltage Samples Acquired", VOLTAGE_SAMPLES_ACQUIRED_KEY, ""),
+                (
+                    "Voltage Sampling Rate",
+                    VOLTAGE_SAMPLING_RATE_HZ_KEY,
+                    " Hz",
+                ),
+                (
+                    "Voltage Recording Duration",
+                    VOLTAGE_DURATION_S_KEY,
+                    " s",
+                ),
+                (
+                    "Configured Voltage Recording Duration",
+                    VOLTAGE_ACQUISITION_TIME_CONFIGURED_S_KEY,
+                    " s",
+                ),
+                (
+                    "Voltage Durations Match",
+                    VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
+                    "",
+                ),
+                (
+                    "Voltage Channel Numbers",
+                    VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
+                    "",
+                ),
+                (
+                    "Voltage Channels Enabled",
+                    VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+                    "",
+                ),
+            ),
+            displayed_voltage_metadata,
+        )
+    )
+
+    return metadata_values
+
+
+
 def render_invivo2p_form(
     *,
     notebook: Any,
@@ -1749,9 +1944,12 @@ def render_invivo2p_form(
         payload_defaults[RAW_2P_SYNC_DATA_PATH_KEY] = ""
         payload_defaults[RAW_2P_SYNC_METADATA_PATH_KEY] = ""
     
-    xml_metadata_state_key = invivo2p_key(form_key, INVIVO2P_TSERIES_XML_METADATA_KEY)
-    if xml_metadata_state_key not in st.session_state:
-        st.session_state[xml_metadata_state_key] = {
+    tseries_xml_metadata_state_key = invivo2p_key(
+        form_key,
+        INVIVO2P_TSERIES_XML_METADATA_KEY,
+    )
+    if tseries_xml_metadata_state_key not in st.session_state:
+        st.session_state[tseries_xml_metadata_state_key] = {
             key: payload_defaults.get(key, "")
             for key in (
                 PRAIRIEVIEW_VERSION_KEY,
@@ -1781,6 +1979,26 @@ def render_invivo2p_form(
                 VOLUME_RATE_HZ_KEY,
             )
         }
+    
+    voltage_metadata_state_key = invivo2p_key(
+        form_key,
+        INVIVO2P_VOLTAGE_XML_METADATA_KEY,
+    )
+    if voltage_metadata_state_key not in st.session_state:
+        st.session_state[voltage_metadata_state_key] = {
+            key: payload_defaults.get(key, "")
+            for key in (
+                VOLTAGE_DATA_FILE_KEY,
+                VOLTAGE_EXPERIMENT_NAME_KEY,
+                VOLTAGE_SAMPLES_ACQUIRED_KEY,
+                VOLTAGE_SAMPLING_RATE_HZ_KEY,
+                VOLTAGE_DURATION_S_KEY,
+                VOLTAGE_ACQUISITION_TIME_CONFIGURED_S_KEY,
+                VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
+                VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
+                VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+            )
+        }    
 
     existing_references = existing_attachment_references(payload_defaults)
     options = normalize_options(config.get(OPTIONS_KEY))
@@ -1827,12 +2045,32 @@ def render_invivo2p_form(
             form_key=form_key,
         )
 
-        imaging_values.update(
-            render_prairieview_tseries_metadata_display(
-                form_key=form_key,
-                defaults=payload_defaults,
+        if st.session_state.get(
+            invivo2p_key(form_key, INVIVO2P_TSERIES_XML_METADATA_KEY)
+        ):
+            imaging_values.update(
+                render_prairieview_tseries_metadata_display(
+                    form_key=form_key,
+                    defaults=payload_defaults,
+                )
             )
+
+        st.divider()
+        st.markdown("### PrairieView Voltage Metadata")
+
+        render_prairieview_voltage_xml_import(
+            form_key=form_key,
         )
+
+        if st.session_state.get(
+            invivo2p_key(form_key, INVIVO2P_VOLTAGE_XML_METADATA_KEY)
+        ):
+            imaging_values.update(
+                render_prairieview_voltage_metadata_display(
+                    form_key=form_key,
+                    defaults=payload_defaults,
+                )
+            )
     
     raw_data_paths = render_raw_data_paths(
         form_key=form_key,
@@ -1893,6 +2131,10 @@ def render_invivo2p_form(
             channel=clean_string(channel_values[CHANNEL_KEY]),
             tseries_xml_metadata_values=st.session_state.get(
                 invivo2p_key(form_key, INVIVO2P_TSERIES_XML_METADATA_KEY),
+                imaging_values,
+            ),
+            voltage_xml_metadata_values=st.session_state.get(
+                invivo2p_key(form_key, INVIVO2P_VOLTAGE_XML_METADATA_KEY),
                 imaging_values,
             ),
             green_construct=clean_string(channel_values[GREEN_CONSTRUCT_KEY]),

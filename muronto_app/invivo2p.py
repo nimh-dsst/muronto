@@ -167,6 +167,26 @@ IMAGING_LAYER_KEY: Final[str] = "imaging_layer"
 DEPTH_UM_KEY: Final[str] = "depth_um"
 
 # ------------------------------------------------------------------
+# Voltage Recording Parameters
+# ------------------------------------------------------------------
+
+VOLTAGE_DATA_FILE_KEY: Final[str] = "voltage_data_file"
+VOLTAGE_EXPERIMENT_NAME_KEY: Final[str] = "voltage_experiment_name"
+VOLTAGE_SAMPLES_ACQUIRED_KEY: Final[str] = "voltage_samples_acquired"
+VOLTAGE_SAMPLING_RATE_HZ_KEY: Final[str] = "voltage_sampling_rate_hz"
+VOLTAGE_DURATION_S_KEY: Final[str] = "voltage_duration_s"
+VOLTAGE_ACQUISITION_TIME_CONFIGURED_S_KEY: Final[str] = (
+    "voltage_acquisition_time_configured_s"
+)
+VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY: Final[str] = (
+    "voltage_duration_matches_configured"
+)
+VOLTAGE_CHANNEL_NUMBERS_ALL_KEY: Final[str] = "voltage_channel_numbers_all"
+VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY: Final[str] = (
+    "voltage_enabled_channel_numbers"
+)
+
+# ------------------------------------------------------------------
 # Notes / attachments
 # ------------------------------------------------------------------
 
@@ -261,6 +281,20 @@ INVIVO2P_TSERIES_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
     FRAME_RATE_HZ_KEY,
     VOLUME_RATE_HZ_KEY,
 )
+
+INVIVO2P_VOLTAGE_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
+    VOLTAGE_DATA_FILE_KEY,
+    VOLTAGE_EXPERIMENT_NAME_KEY,
+    VOLTAGE_SAMPLES_ACQUIRED_KEY,
+    VOLTAGE_SAMPLING_RATE_HZ_KEY,
+    VOLTAGE_DURATION_S_KEY,
+    VOLTAGE_ACQUISITION_TIME_CONFIGURED_S_KEY,
+    VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
+    VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
+    VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+)
+
+
 
 class Invivo2pValidationError(ValueError):
     """Raised when invivo2p form values do not make a valid payload."""
@@ -836,6 +870,7 @@ def build_invivo2p_payload(
     general_notes: str = "",
     attachments: Iterable[Mapping[str, object]] = (),
     tseries_xml_metadata_values: Mapping[str, object] | None = None,
+    voltage_xml_metadata_values: Mapping[str, object] | None = None,
     allow_incomplete: bool = False,
     draft_id: str = "",
 ) -> dict[str, Any]:
@@ -973,6 +1008,7 @@ def build_invivo2p_payload(
         INVIVO2P_SOFTWARE_NAME_KEY: cleaned_invivo2p_software_name,
         BEHAVIOR_RIG_KEY: cleaned_behavior_rig,
         **clean_tseries_xml_metadata_values(tseries_xml_metadata_values),
+        **clean_voltage_xml_metadata_values(voltage_xml_metadata_values),
         **channel_fields,
         NUM_FOVS_KEY: cleaned_num_fovs,
         FOVS_KEY: cleaned_fovs,
@@ -1019,6 +1055,24 @@ def clean_tseries_xml_metadata_values(
         cleaned[key] = value
 
     return cleaned
+
+
+def clean_voltage_xml_metadata_values(
+    values: Mapping[str, object] | None,
+) -> dict[str, object]:
+    if not isinstance(values, Mapping):
+        return {}
+
+    cleaned: dict[str, object] = {}
+    for key in INVIVO2P_VOLTAGE_XML_METADATA_FIELD_KEYS:
+        value = values.get(key)
+        if value in ("", None):
+            cleaned[key] = ""
+            continue
+        cleaned[key] = value
+
+    return cleaned
+
 
 def invivo2p_option_values(
     payload: Mapping[str, Any],
