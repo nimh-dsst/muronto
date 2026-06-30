@@ -88,7 +88,7 @@ ZOOM_KEY: Final[str] = "zoom"
 IMAGING_LASER_WAVELENGTH_NM_KEY: Final[str] = (
     "imaging_laser_wavelength_nm"
 )
-IMAGING_LASER_POWER_MW_KEY: Final[str] = "imaging_laser_power_mw"
+IMAGING_LASER_POWER_KEY: Final[str] = "imaging_laser_power"
 
 RESOLUTION_PIX_KEY: Final[str] = "resolution_pix"
 FOV_SIZE_UM_KEY: Final[str] = "fov_size_um"
@@ -241,7 +241,7 @@ INVIVO2P_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
     STAGE_X_KEY,
     STAGE_Y_KEY,
     Z_FOCUS_KEY,
-    IMAGING_LASER_POWER_MW_KEY,
+    IMAGING_LASER_POWER_KEY,
     PMT_GAIN_0_KEY,
     PMT_GAIN_1_KEY,
     NUM_PLANES_KEY,
@@ -618,8 +618,8 @@ def _validate_plane_entries(
     field_prefix: str,
     errors: list[str],
     allow_incomplete: bool = False,
-) -> list[dict[str, str | float | int | None]]:
-    planes: list[dict[str, str | float | int | None]] = []
+) -> list[dict[str, str | int | None]]:
+    planes: list[dict[str, str | int | None]] = []
 
     for plane_index, raw_plane in enumerate(
         _raw_list(
@@ -644,24 +644,27 @@ def _validate_plane_entries(
             errors=errors,
             allow_incomplete=allow_incomplete,
         )
+
         imaging_layer = clean_string(plane_payload.get(IMAGING_LAYER_KEY))
         _validate_required(
             field_name=f"{field_name}.{IMAGING_LAYER_KEY}",
             value=imaging_layer,
             errors=errors,
         )
-        depth_um = _validate_non_negative_number(
-            field_name=f"{field_name}.{DEPTH_UM_KEY}",
-            value=plane_payload.get(DEPTH_UM_KEY),
-            errors=errors,
-            allow_incomplete=allow_incomplete,
+
+        green_substrate = clean_string(
+            plane_payload.get(GREEN_CHANNEL_SUBSTRATE_KEY)
+        )
+        red_substrate = clean_string(
+            plane_payload.get(RED_CHANNEL_SUBSTRATE_KEY)
         )
 
         planes.append(
             {
                 PLANE_NUMBER_KEY: plane_number,
                 IMAGING_LAYER_KEY: imaging_layer,
-                DEPTH_UM_KEY: depth_um,
+                GREEN_CHANNEL_SUBSTRATE_KEY: green_substrate,
+                RED_CHANNEL_SUBSTRATE_KEY: red_substrate,
             }
         )
 
@@ -768,22 +771,11 @@ def _validate_channel_fields(
 
     green_construct = clean_string(raw_payload.get(GREEN_CONSTRUCT_KEY))
     red_construct = clean_string(raw_payload.get(RED_CONSTRUCT_KEY))
-    green_substrate = clean_string(
-        raw_payload.get(GREEN_CHANNEL_SUBSTRATE_KEY)
-    )
-    red_substrate = clean_string(
-        raw_payload.get(RED_CHANNEL_SUBSTRATE_KEY)
-    )
 
     if channel in ("Green", "Green + Red"):
         _validate_required(
             field_name=GREEN_CONSTRUCT_KEY,
             value=green_construct,
-            errors=errors,
-        )
-        _validate_required(
-            field_name=GREEN_CHANNEL_SUBSTRATE_KEY,
-            value=green_substrate,
             errors=errors,
         )
 
@@ -793,18 +785,11 @@ def _validate_channel_fields(
             value=red_construct,
             errors=errors,
         )
-        _validate_required(
-            field_name=RED_CHANNEL_SUBSTRATE_KEY,
-            value=red_substrate,
-            errors=errors,
-        )
 
     return {
         CHANNEL_KEY: channel,
         GREEN_CONSTRUCT_KEY: green_construct,
         RED_CONSTRUCT_KEY: red_construct,
-        GREEN_CHANNEL_SUBSTRATE_KEY: green_substrate,
-        RED_CHANNEL_SUBSTRATE_KEY: red_substrate,
     }
 
 
