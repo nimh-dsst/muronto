@@ -51,6 +51,10 @@ INVIVO2P_STATUS_INCOMPLETE: Final[str] = "incomplete"
 INVIVO2P_VALIDATION_ERRORS_KEY: Final[str] = "validation_errors"
 INVIVO2P_DRAFT_ID_KEY: Final[str] = "invivo2p_draft_id"
 
+# ------------------------------------------------------------------
+# Session metadata
+# ------------------------------------------------------------------
+
 SESSION_DATE_KEY: Final[str] = "session_date"
 SESSION_ID_KEY: Final[str] = "session_id"
 SESSION_TYPE_KEY: Final[str] = "session_type"
@@ -61,16 +65,47 @@ IMAGER_KEY: Final[str] = "imager"
 START_TIME_KEY: Final[str] = "start_time"
 END_TIME_KEY: Final[str] = "end_time"
 
+# ------------------------------------------------------------------
+# Imaging system / acquisition metadata
+# ------------------------------------------------------------------
+
 INVIVO2P_SYSTEM_ID_KEY: Final[str] = "invivo2p_system_id"
 INVIVO2P_SOFTWARE_NAME_KEY: Final[str] = "invivo2p_software_name"
 BEHAVIOR_RIG_KEY: Final[str] = "behavior_rig"
 
+NUM_CHANNELS_RECORDED_KEY: Final[str] = "num_channels_recorded"
+CHANNEL_NUMBERS_RECORDED_KEY: Final[str] = "channel_numbers_recorded"
+CHANNEL_NAMES_RECORDED_KEY: Final[str] = "channel_names_recorded"
+
 OBJECTIVE_KEY: Final[str] = "objective"
+OBJECTIVE_MAGNIFICATION_KEY: Final[str] = "objective_magnification"
+OBJECTIVE_NA_KEY: Final[str] = "objective_na"
+
+ZOOM_KEY: Final[str] = "zoom"
 
 IMAGING_LASER_WAVELENGTH_NM_KEY: Final[str] = (
     "imaging_laser_wavelength_nm"
 )
 IMAGING_LASER_POWER_MW_KEY: Final[str] = "imaging_laser_power_mw"
+
+RESOLUTION_PIX_KEY: Final[str] = "resolution_pix"
+FOV_SIZE_UM_KEY: Final[str] = "fov_size_um"
+
+STAGE_X_KEY: Final[str] = "stage_x"
+STAGE_Y_KEY: Final[str] = "stage_y"
+Z_FOCUS_KEY: Final[str] = "z_focus"
+
+PMT_GAIN_0_KEY: Final[str] = "pmt_gain_0"
+PMT_GAIN_1_KEY: Final[str] = "pmt_gain_1"
+
+FRAME_COUNT_TOTAL_KEY: Final[str] = "frame_count_total"
+DURATION_S_KEY: Final[str] = "duration_s"
+FRAME_RATE_HZ_KEY: Final[str] = "frame_rate_hz"
+VOLUME_RATE_HZ_KEY: Final[str] = "volume_rate_hz"
+
+# ------------------------------------------------------------------
+# Optogenetics
+# ------------------------------------------------------------------
 
 WF_OPTO_WAVELENGTH_NM_KEY: Final[str] = "wf_opto_wavelength_nm"
 WF_OPTO_POWER_MW_KEY: Final[str] = "wf_opto_power_mw"
@@ -80,10 +115,9 @@ SLM_OPTO_WAVELENGTH_NM_KEY: Final[str] = "slm_opto_wavelength_nm"
 SLM_OPTO_POWER_MW_KEY: Final[str] = "slm_opto_power_mw"
 SLM_OPTO_MODE_KEY: Final[str] = "slm_opto_mode"
 
-FRAME_RATE_HZ_KEY: Final[str] = "frame_rate_hz"
-ZOOM_KEY: Final[str] = "zoom"
-RESOLUTION_PIX_KEY: Final[str] = "resolution_pix"
-FOV_SIZE_UM_KEY: Final[str] = "fov_size_um"
+# ------------------------------------------------------------------
+# Sensory stimulation
+# ------------------------------------------------------------------
 
 SENSORY_STIMULI_KEY: Final[str] = "sensory_stimuli"
 SENSORY_STIMULUS_TYPE_KEY: Final[str] = "sensory_stimulus_type"
@@ -91,6 +125,10 @@ STIMULUS_DURATION_MS_KEY: Final[str] = "stimulus_duration_ms"
 STIMULUS_REPETITION_KEY: Final[str] = "stimulus_repetition"
 STIMULUS_FREQUENCY_HZ_KEY: Final[str] = "stimulus_frequency_hz"
 STIMULUS_NOTES_KEY: Final[str] = "stimulus_notes"
+
+# ------------------------------------------------------------------
+# Behavior cameras
+# ------------------------------------------------------------------
 
 CAMERAS_KEY: Final[str] = "cameras"
 CAMERA_NUMBER_KEY: Final[str] = "camera_number"
@@ -100,11 +138,19 @@ CAMERA_VIEW_KEY: Final[str] = "camera_view"
 CAMERA_FRAME_RATE_HZ_KEY: Final[str] = "camera_frame_rate_hz"
 CAMERA_NOTES_KEY: Final[str] = "camera_notes"
 
+# ------------------------------------------------------------------
+# Imaging channels
+# ------------------------------------------------------------------
+
 CHANNEL_KEY: Final[str] = "channel"
 GREEN_CONSTRUCT_KEY: Final[str] = "green_construct"
 RED_CONSTRUCT_KEY: Final[str] = "red_construct"
 GREEN_CHANNEL_SUBSTRATE_KEY: Final[str] = "green_channel_substrate"
 RED_CHANNEL_SUBSTRATE_KEY: Final[str] = "red_channel_substrate"
+
+# ------------------------------------------------------------------
+# FOVs / imaging planes
+# ------------------------------------------------------------------
 
 NUM_FOVS_KEY: Final[str] = "num_fovs"
 
@@ -112,13 +158,20 @@ FOVS_KEY: Final[str] = "fovs"
 FOV_NUMBER_KEY: Final[str] = "fov_number"
 IMAGING_REGION_KEY: Final[str] = "imaging_region"
 HEMISPHERE_KEY: Final[str] = "hemisphere"
+
 NUM_PLANES_KEY: Final[str] = "num_planes"
+PLANE_RELATIVE_DEPTHS_KEY: Final[str] = "plane_relative_depths"
+
 PLANES_KEY: Final[str] = "planes"
 FOV_NOTES_KEY: Final[str] = "fov_notes"
 
 PLANE_NUMBER_KEY: Final[str] = "plane_number"
 IMAGING_LAYER_KEY: Final[str] = "imaging_layer"
 DEPTH_UM_KEY: Final[str] = "depth_um"
+
+# ------------------------------------------------------------------
+# Notes / attachments
+# ------------------------------------------------------------------
 
 GENERAL_NOTES_KEY: Final[str] = "notes_general"
 
@@ -139,10 +192,18 @@ INVIVO2P_FILE_UPLOAD_TYPES: Final[tuple[str, ...]] = (
     TAKEN_PHOTO_UPLOAD_TYPE,
 )
 
+# ------------------------------------------------------------------
+# Raw data file paths
+# ------------------------------------------------------------------
+
 RAW_2P_IMAGING_DATA_PATH_KEY: Final[str] = "raw_2p_imaging_data_path"
 RAW_2P_IMAGING_METADATA_PATH_KEY: Final[str] = "raw_2p_imaging_metadata_path"
 RAW_2P_SYNC_DATA_PATH_KEY: Final[str] = "raw_2p_sync_data_path"
 RAW_2P_SYNC_METADATA_PATH_KEY: Final[str] = "raw_2p_sync_metadata_path"
+
+# ------------------------------------------------------------------
+# Static option lists
+# ------------------------------------------------------------------
 
 INVIVO2P_SESSION_TYPE_OPTIONS: Final[tuple[str, ...]] = (
     "2P Imaging",
@@ -175,6 +236,30 @@ SLM_OPTO_MODE_OPTIONS: Final[tuple[str, ...]] = (
     "Sequential Single Target",
 )
 
+INVIVO2P_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
+    NUM_CHANNELS_RECORDED_KEY,
+    CHANNEL_NUMBERS_RECORDED_KEY,
+    CHANNEL_NAMES_RECORDED_KEY,
+    OBJECTIVE_KEY,
+    OBJECTIVE_MAGNIFICATION_KEY,
+    OBJECTIVE_NA_KEY,
+    ZOOM_KEY,
+    IMAGING_LASER_WAVELENGTH_NM_KEY,
+    RESOLUTION_PIX_KEY,
+    FOV_SIZE_UM_KEY,
+    STAGE_X_KEY,
+    STAGE_Y_KEY,
+    Z_FOCUS_KEY,
+    IMAGING_LASER_POWER_MW_KEY,
+    PMT_GAIN_0_KEY,
+    PMT_GAIN_1_KEY,
+    NUM_PLANES_KEY,
+    PLANE_RELATIVE_DEPTHS_KEY,
+    FRAME_COUNT_TOTAL_KEY,
+    DURATION_S_KEY,
+    FRAME_RATE_HZ_KEY,
+    VOLUME_RATE_HZ_KEY,
+)
 
 class Invivo2pValidationError(ValueError):
     """Raised when invivo2p form values do not make a valid payload."""
@@ -830,13 +915,6 @@ def build_invivo2p_payload(
     invivo2p_system_id: str,
     invivo2p_software_name: str,
     behavior_rig: str,
-    objective: str,
-    imaging_laser_wavelength_nm: int | float | None,
-    imaging_laser_power_mw: int | float | None,
-    frame_rate_hz: int | float | None,
-    zoom: int | float | None,
-    resolution_pix: str,
-    fov_size_um: str,
     channel: str,
     green_construct: str = "",
     red_construct: str = "",
@@ -858,6 +936,7 @@ def build_invivo2p_payload(
     raw_2p_sync_metadata_path: str = "",
     general_notes: str = "",
     attachments: Iterable[Mapping[str, object]] = (),
+    xml_metadata_values: Mapping[str, object] | None = None,
     allow_incomplete: bool = False,
     draft_id: str = "",
 ) -> dict[str, Any]:
@@ -874,11 +953,9 @@ def build_invivo2p_payload(
     cleaned_invivo2p_system_id = clean_string(invivo2p_system_id)
     cleaned_invivo2p_software_name = clean_string(invivo2p_software_name)
     cleaned_behavior_rig = clean_string(behavior_rig)
-    cleaned_objective = clean_string(objective)
-    cleaned_resolution_pix = clean_string(resolution_pix)
-    cleaned_fov_size_um = clean_string(fov_size_um)
     cleaned_general_notes = clean_string(general_notes)
     cleaned_draft_id = clean_string(draft_id)
+
     errors: list[str] = []
     for field_name, value in (
         (PROJECT_ID_KEY, cleaned_project_id),
@@ -893,13 +970,13 @@ def build_invivo2p_payload(
         (INVIVO2P_SYSTEM_ID_KEY, cleaned_invivo2p_system_id),
         (INVIVO2P_SOFTWARE_NAME_KEY, cleaned_invivo2p_software_name),
         (BEHAVIOR_RIG_KEY, cleaned_behavior_rig),
-        (OBJECTIVE_KEY, cleaned_objective),
     ):
         _validate_required(
             field_name=field_name,
             value=value,
             errors=errors,
         )
+
     if (
         cleaned_session_type
         and cleaned_session_type not in INVIVO2P_SESSION_TYPE_OPTIONS
@@ -909,6 +986,7 @@ def build_invivo2p_payload(
             + ", ".join(INVIVO2P_SESSION_TYPE_OPTIONS)
             + "."
         )
+
     formatted_session_date = _format_date_or_error(
         field_name=SESSION_DATE_KEY,
         value=session_date,
@@ -924,35 +1002,12 @@ def build_invivo2p_payload(
         value=end_time,
         errors=errors,
     )
+
     if isinstance(start_time, time) and isinstance(end_time, time):
         if end_time <= start_time:
             errors.append(
                 f"{END_TIME_KEY} must be later than {START_TIME_KEY}."
             )
-    cleaned_imaging_laser_wavelength_nm = _validate_non_negative_number(
-        field_name=IMAGING_LASER_WAVELENGTH_NM_KEY,
-        value=imaging_laser_wavelength_nm,
-        errors=errors,
-        allow_incomplete=allow_incomplete,
-    )
-    cleaned_imaging_laser_power_mw = _validate_non_negative_number(
-        field_name=IMAGING_LASER_POWER_MW_KEY,
-        value=imaging_laser_power_mw,
-        errors=errors,
-        allow_incomplete=allow_incomplete,
-    )
-    cleaned_frame_rate_hz = _validate_non_negative_number(
-        field_name=FRAME_RATE_HZ_KEY,
-        value=frame_rate_hz,
-        errors=errors,
-        allow_incomplete=allow_incomplete,
-    )
-    cleaned_zoom = _validate_non_negative_number(
-        field_name=ZOOM_KEY,
-        value=zoom,
-        errors=errors,
-        allow_incomplete=allow_incomplete,
-    )
 
     cleaned_num_fovs = _validate_positive_integer(
         field_name=NUM_FOVS_KEY,
@@ -960,7 +1015,7 @@ def build_invivo2p_payload(
         errors=errors,
         allow_incomplete=allow_incomplete,
     )
-    
+
     channel_fields = _validate_channel_fields(
         {
             CHANNEL_KEY: channel,
@@ -1032,13 +1087,7 @@ def build_invivo2p_payload(
         INVIVO2P_SYSTEM_ID_KEY: cleaned_invivo2p_system_id,
         INVIVO2P_SOFTWARE_NAME_KEY: cleaned_invivo2p_software_name,
         BEHAVIOR_RIG_KEY: cleaned_behavior_rig,
-        OBJECTIVE_KEY: cleaned_objective,
-        IMAGING_LASER_WAVELENGTH_NM_KEY: cleaned_imaging_laser_wavelength_nm,
-        IMAGING_LASER_POWER_MW_KEY: cleaned_imaging_laser_power_mw,
-        FRAME_RATE_HZ_KEY: cleaned_frame_rate_hz,
-        ZOOM_KEY: cleaned_zoom,
-        RESOLUTION_PIX_KEY: cleaned_resolution_pix,
-        FOV_SIZE_UM_KEY: cleaned_fov_size_um,
+        **clean_xml_metadata_values(xml_metadata_values),
         **channel_fields,
         **opto_fields,
         NUM_FOVS_KEY: cleaned_num_fovs,
@@ -1068,8 +1117,24 @@ def build_invivo2p_payload(
     payload[INVIVO2P_VALIDATION_ERRORS_KEY] = list(errors)
     if errors and cleaned_draft_id and not formatted_session_date:
         payload[INVIVO2P_DRAFT_ID_KEY] = cleaned_draft_id
+
     return payload
 
+def clean_xml_metadata_values(
+    values: Mapping[str, object] | None,
+) -> dict[str, object]:
+    if not isinstance(values, Mapping):
+        return {}
+
+    cleaned: dict[str, object] = {}
+    for key in INVIVO2P_XML_METADATA_FIELD_KEYS:
+        value = values.get(key)
+        if value in ("", None):
+            cleaned[key] = ""
+            continue
+        cleaned[key] = value
+
+    return cleaned
 
 def invivo2p_option_values(
     payload: Mapping[str, Any],
