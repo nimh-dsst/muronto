@@ -132,6 +132,7 @@ from muronto_app.invivo2p import (
     STIMULUS_NOTES_KEY,
     STIMULUS_REPETITION_KEY,
     TAKEN_PHOTO_UPLOAD_TYPE,
+    TSERIES_XML_FILENAME_KEY,
     ZOOM_KEY,
     NUM_CHANNELS_RECORDED_KEY,
     CHANNEL_NUMBERS_RECORDED_KEY,
@@ -143,7 +144,9 @@ from muronto_app.invivo2p import (
     Z_FOCUS_KEY,
     PMT_GAIN_0_KEY,
     PMT_GAIN_1_KEY,
+    PLANE_DEPTHS_KEY,
     PLANE_RELATIVE_DEPTHS_KEY,
+    LASER_POWER_AT_PLANE_DEPTHS_KEY,
     FRAME_COUNT_TOTAL_KEY,
     DURATION_S_KEY,
     VOLUME_RATE_HZ_KEY,
@@ -958,6 +961,7 @@ def render_prairieview_tseries_metadata_display(
     tseries_metadata = {
         key: xml_metadata.get(key, defaults.get(key, ""))
         for key in (
+            TSERIES_XML_FILENAME_KEY,
             PRAIRIEVIEW_VERSION_KEY,
             NUM_CHANNELS_RECORDED_KEY,
             CHANNEL_NUMBERS_RECORDED_KEY,
@@ -976,7 +980,9 @@ def render_prairieview_tseries_metadata_display(
             PMT_GAIN_0_KEY,
             PMT_GAIN_1_KEY,
             NUM_PLANES_KEY,
+            PLANE_DEPTHS_KEY,
             PLANE_RELATIVE_DEPTHS_KEY,
+            LASER_POWER_AT_PLANE_DEPTHS_KEY,
             FRAME_COUNT_TOTAL_KEY,
             DURATION_S_KEY,
             FRAME_RATE_HZ_KEY,
@@ -985,6 +991,16 @@ def render_prairieview_tseries_metadata_display(
     }
 
     metadata_values: dict[str, str] = {}
+
+    metadata_values.update(
+        render_metadata_section(
+            "File",
+            (
+                ("File Name", TSERIES_XML_FILENAME_KEY, ""),
+            ),
+            tseries_metadata,
+        )
+    )
 
     metadata_values.update(
         render_metadata_section(
@@ -1010,44 +1026,22 @@ def render_prairieview_tseries_metadata_display(
 
     metadata_values.update(
         render_metadata_section(
-            "Imaging",
-            (
-                ("Zoom", ZOOM_KEY, ""),
-                (
-                    "Laser Wavelength",
-                    IMAGING_LASER_WAVELENGTH_NM_KEY,
-                    " nm",
-                ),
-                ("Laser Power", IMAGING_LASER_POWER_KEY, ""),
-                ("FOV Size", FOV_SIZE_UM_KEY, " µm"),
-            ),
-            tseries_metadata,
-        )
-    )
-
-    metadata_values.update(
-        render_metadata_section(
-            "Acquisition",
-            (
-                ("Resolution", RESOLUTION_PIX_KEY, ""),
-                ("Frame Rate", FRAME_RATE_HZ_KEY, " Hz"),
-                ("Volume Rate", VOLUME_RATE_HZ_KEY, " Hz"),
-                ("Duration", DURATION_S_KEY, " s"),
-                ("Frame Count", FRAME_COUNT_TOTAL_KEY, ""),
-                ("Num Planes", NUM_PLANES_KEY, ""),
-                ("Plane Depths", PLANE_RELATIVE_DEPTHS_KEY, " µm"),
-            ),
-            tseries_metadata,
-        )
-    )
-
-    metadata_values.update(
-        render_metadata_section(
             "Channels",
             (
                 ("Number Recorded", NUM_CHANNELS_RECORDED_KEY, ""),
                 ("Channel Numbers", CHANNEL_NUMBERS_RECORDED_KEY, ""),
                 ("Channel Names", CHANNEL_NAMES_RECORDED_KEY, ""),
+            ),
+            tseries_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "PMTs",
+            (
+                ("PMT 0 Gain", PMT_GAIN_0_KEY, ""),
+                ("PMT 1 Gain", PMT_GAIN_1_KEY, ""),
             ),
             tseries_metadata,
         )
@@ -1067,10 +1061,33 @@ def render_prairieview_tseries_metadata_display(
 
     metadata_values.update(
         render_metadata_section(
-            "PMTs",
+            "Imaging",
             (
-                ("PMT 0 Gain", PMT_GAIN_0_KEY, ""),
-                ("PMT 1 Gain", PMT_GAIN_1_KEY, ""),
+                ("Zoom", ZOOM_KEY, ""),
+                (
+                    "Laser Wavelength",
+                    IMAGING_LASER_WAVELENGTH_NM_KEY,
+                    " nm",
+                ),
+                ("Laser Power", IMAGING_LASER_POWER_KEY, ""),
+                ("FOV Size", FOV_SIZE_UM_KEY, " µm"),
+                ("Resolution", RESOLUTION_PIX_KEY, ""),
+                ("Frame Rate", FRAME_RATE_HZ_KEY, " Hz"),
+                ("Volume Rate", VOLUME_RATE_HZ_KEY, " Hz"),
+                ("Duration", DURATION_S_KEY, " s"),
+                ("Frame Count", FRAME_COUNT_TOTAL_KEY, ""),
+                ("Num Planes", NUM_PLANES_KEY, ""),
+                ("Plane Depths", PLANE_DEPTHS_KEY, " µm"),
+                (
+                    "Plane Relative Depths",
+                    PLANE_RELATIVE_DEPTHS_KEY,
+                    " µm",
+                ),
+                (
+                    "Laser Power at Plane Depths",
+                    LASER_POWER_AT_PLANE_DEPTHS_KEY,
+                    "",
+                ),
             ),
             tseries_metadata,
         )
@@ -1620,9 +1637,17 @@ def render_prairieview_tseries_xml_import(*, form_key: str) -> dict[str, Any]:
             PMT_GAIN_0_KEY: metadata_value(tseries_metadata, "pmt_gain_0"),
             PMT_GAIN_1_KEY: metadata_value(tseries_metadata, "pmt_gain_1"),
             NUM_PLANES_KEY: metadata_value(tseries_metadata, "num_planes_inferred"),
+            PLANE_DEPTHS_KEY: metadata_text(
+                tseries_metadata,
+                "plane_depths",
+            ),
             PLANE_RELATIVE_DEPTHS_KEY: metadata_text(
                 tseries_metadata,
                 "plane_relative_depths",
+            ),
+            LASER_POWER_AT_PLANE_DEPTHS_KEY: metadata_text(
+                tseries_metadata,
+                "laser_power_at_plane_depths",
             ),
             FRAME_COUNT_TOTAL_KEY: metadata_value(
                 tseries_metadata,
@@ -1660,8 +1685,12 @@ def render_prairieview_tseries_xml_import(*, form_key: str) -> dict[str, Any]:
             st.error("Parsed PrairieView TSeries XML did not contain metadata.")
             return {}
 
-        muronto_tseries_metadata = prairieview_to_muronto_metadata(tseries_metadata)
+        parsed_metadata = prairieview_to_muronto_metadata(tseries_metadata)
 
+        muronto_tseries_metadata = {
+            TSERIES_XML_FILENAME_KEY: uploaded_tseries_xml.name,
+            **parsed_metadata,
+        }
         st.success("Parsed PrairieView TSeries XML.")
 
         with st.expander("Preview mapped TSeries XML metadata", expanded=True):
@@ -1743,8 +1772,10 @@ def render_invivo2p_form(
                 PMT_GAIN_0_KEY,
                 PMT_GAIN_1_KEY,
                 NUM_PLANES_KEY,
+                PLANE_DEPTHS_KEY,
                 PLANE_RELATIVE_DEPTHS_KEY,
                 FRAME_COUNT_TOTAL_KEY,
+                LASER_POWER_AT_PLANE_DEPTHS_KEY,
                 DURATION_S_KEY,
                 FRAME_RATE_HZ_KEY,
                 VOLUME_RATE_HZ_KEY,
@@ -1860,7 +1891,7 @@ def render_invivo2p_form(
             ),
             behavior_rig=clean_string(imaging_values[BEHAVIOR_RIG_KEY]),
             channel=clean_string(channel_values[CHANNEL_KEY]),
-            xml_metadata_values=st.session_state.get(
+            tseries_xml_metadata_values=st.session_state.get(
                 invivo2p_key(form_key, INVIVO2P_TSERIES_XML_METADATA_KEY),
                 imaging_values,
             ),

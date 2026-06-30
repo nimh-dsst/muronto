@@ -32,7 +32,14 @@ def clean_float(value: Any) -> float | None:
     try:
         if value in (None, ""):
             return None
-        return float(value)
+
+        parsed = float(value)
+
+        if pd.isna(parsed):
+            return None
+
+        return parsed
+
     except (TypeError, ValueError):
         return None
 
@@ -398,6 +405,7 @@ def infer_planes(
     frame_df: pd.DataFrame,
     z_audit_df: pd.DataFrame,
     sequence_df: pd.DataFrame,
+    global_state: dict[str, Any],
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     depth_col = choose_depth_column(z_audit_df)
 
@@ -405,35 +413,192 @@ def infer_planes(
         sequence_df.get("sequence_type", pd.Series(dtype=str)).dropna()
     )
     sequence_type_text = " ".join(str(x) for x in sequence_types)
+    is_zseries = "ZSeries" in sequence_type_text
 
-    if depth_col is None:
-        num_planes = 1
-        plane_depths = [0.0]
-        plane_source = "none_detected"
-    else:
-        depth_values = pd.to_numeric(z_audit_df[depth_col], errors="coerce")
-        unique_depths = sorted(depth_values.dropna().round(6).unique().tolist())
+    plane_source = depth_col or "none_detected"
 
-        if "ZSeries" in sequence_type_text and len(unique_depths) > 1:
-            plane_depths = unique_depths
-            num_planes = len(unique_depths)
-            plane_source = depth_col
-        elif len(unique_depths) > 1:
-            plane_depths = unique_depths
-            num_planes = len(unique_depths)
-            plane_source = depth_col
+    def z_focus_value() -> float | None:
+        return clean_float(
+            global_state.get("positionCurrent.Z Focus.0")
+            or global_state.get("positionCurrent.ZAxis.0")
+        )
+
+    def global_laser_power_0() -> float | None:
+        return clean_float(global_state.get("laserPower.0"))
+
+    def frame_state_value(
+        frame_row: pd.Series,
+        state_key: str,
+    ) -> float | None:
+        col = f"state.{state_key}"
+        if col not in frame_row:
+            return None
+        return clean_float(frame_row.get(col))
+
+    def global_state_value(state_key: str | None) -> float | None:
+        if not state_key:
+            return None
+        return clean_float(global_state.get(state_key))
+
+    def representative_zseries_frames(num_planes: int) -> pd.DataFrame:
+        if frame_df.empty:
+            return pd.DataFrame()
+
+        frames_per_sequence = (
+            frame_df.groupby("sequence_index")["frame_index_within_sequence"]
+            .max()
+            .dropna()
+        )
+
+        representative_sequences = frames_per_sequence[
+            frames_per_sequence == num_planes
+        ]
+
+        if len(representative_sequences):
+            representative_sequence_index = representative_sequences.index[0]
         else:
-            num_planes = 1
-            plane_depths = unique_depths or [0.0]
-            plane_source = depth_col
+            representative_sequence_index = frame_df["sequence_index"].iloc[0]
+
+        return (
+            frame_df[
+                frame_df["sequence_index"] == representative_sequence_index
+            ]
+            .sort_values("frame_index_within_sequence")
+            .head(num_planes)
+        )
+
+    focus = z_focus_value()
+    default_laser = global_laser_power_0()
+
+    plane_depths: list[float | None] = []
+    plane_relative_depths: list[float | None] = []
+    laser_power_at_plane_depths: list[float | None] = []
+
+    if frame_df.empty:
+        num_planes = 1
+        plane_depths = [focus if focus is not None else 0.0]
+        plane_relative_depths = [0.0]
+        laser_power_at_plane_depths = [default_laser]
+
+    elif not is_zseries:
+        num_planes = 1
+        plane_depths = [focus if focus is not None else 0.0]
+        plane_relative_depths = [0.0]
+        laser_power_at_plane_depths = [default_laser]
+
+    else:
+        frames_per_sequence = (
+            frame_df.groupby("sequence_index")["frame_index_within_sequence"]
+            .max()
+            .dropna()
+        )
+
+        num_planes = (
+            int(frames_per_sequence.mode().iloc[0])
+            if len(frames_per_sequence)
+            else 1
+        )
+
+        depth_col_text = clean_string(depth_col).lower()
+        global_depth_value = global_state_value(depth_col)
+
+        frames = representative_zseries_frames(num_planes)
+
+        for _, frame_row in frames.iterrows():
+            frame_depth_value = (
+                frame_state_value(frame_row, depth_col)
+                if depth_col
+                else None
+            )
+
+            frame_laser_value = frame_state_value(frame_row, "laserPower.0")
+            laser_value = (
+                frame_laser_value
+                if frame_laser_value is not None
+                else default_laser
+            )
+
+            if "etl" in depth_col_text or "optotune" in depth_col_text:
+                relative_depth = (
+                    frame_depth_value
+                    if frame_depth_value is not None
+                    else global_depth_value
+                )
+                if relative_depth is None:
+                    relative_depth = 0.0
+
+                if focus is not None:
+                    plane_depth = round(focus + relative_depth, 6)
+                else:
+                    plane_depth = relative_depth
+
+            elif "piezo" in depth_col_text:
+                plane_depth = (
+                    frame_depth_value
+                    if frame_depth_value is not None
+                    else focus
+                )
+
+                if plane_depth is None:
+                    plane_depth = 0.0
+
+                relative_depth = (
+                    round(plane_depth - focus, 6)
+                    if focus is not None
+                    else None
+                )
+
+                if plane_source == depth_col and frame_depth_value is None:
+                    plane_source = f"{depth_col} + Z Focus fallback"
+
+            else:
+                raw_depth = (
+                    frame_depth_value
+                    if frame_depth_value is not None
+                    else global_depth_value
+                )
+
+                if raw_depth is None:
+                    raw_depth = 0.0
+
+                if focus is not None:
+                    plane_depth = round(focus + raw_depth, 6)
+                    relative_depth = raw_depth
+                else:
+                    plane_depth = raw_depth
+                    relative_depth = None
+
+            plane_depths.append(plane_depth)
+            plane_relative_depths.append(relative_depth)
+            laser_power_at_plane_depths.append(laser_value)
+
+        if len(plane_depths) < num_planes:
+            missing = num_planes - len(plane_depths)
+            plane_depths.extend([focus if focus is not None else 0.0] * missing)
+            plane_relative_depths.extend([0.0] * missing)
+            laser_power_at_plane_depths.extend([default_laser] * missing)
 
     plane_rows = [
         {
-            "plane_number": i,
-            "relative_depth_value": depth,
-            "relative_depth_source": plane_source,
+            "plane_index_in_volume": i,
+            "frame_index_in_volume": i,
+            "plane_depth": plane_depth,
+            "plane_relative_depth": relative_depth,
+            "laser_power": laser_power,
+            "plane_depth_source": plane_source,
+            "laser_power_source": (
+                "Frame laserPower.0 if present; "
+                "otherwise global laserPower.0"
+            ),
         }
-        for i, depth in enumerate(plane_depths, start=1)
+        for i, (plane_depth, relative_depth, laser_power) in enumerate(
+            zip(
+                plane_depths,
+                plane_relative_depths,
+                laser_power_at_plane_depths,
+            ),
+            start=1,
+        )
     ]
 
     complete_volumes = len(frame_df) // num_planes if num_planes else None
@@ -445,7 +610,9 @@ def infer_planes(
 
     summary = {
         "num_planes_inferred": num_planes,
-        "plane_relative_depths": plane_depths,
+        "plane_depths": plane_depths,
+        "plane_relative_depths": plane_relative_depths,
+        "laser_power_at_plane_depths": laser_power_at_plane_depths,
         "plane_depth_source": plane_source,
         "num_volumes_complete": complete_volumes,
         "leftover_frames_after_complete_volumes": leftover_frames,
@@ -824,8 +991,12 @@ def build_metadata_summary(
             extraction_method="inferred from depth values and repeated frame pattern",
             confidence=(
                 "high"
-                if variable in ("num_planes_inferred", "plane_relative_depths")
-                else "medium"
+                if variable in (
+                    "num_planes_inferred",
+                    "plane_depths",
+                    "plane_relative_depths",
+                    "laser_power_at_plane_depths",
+                )                else "medium"
             ),
         )
 
@@ -865,7 +1036,12 @@ def parse_prairieview_root(root: ET.Element) -> dict[str, Any]:
     sequence_df = parse_sequences(root)
     frame_df, file_df = parse_frames(root)
     z_audit_df = infer_z_values(frame_df, global_state)
-    plane_df, plane_summary = infer_planes(frame_df, z_audit_df, sequence_df)
+    plane_df, plane_summary = infer_planes(
+        frame_df,
+        z_audit_df,
+        sequence_df,
+        global_state,
+    )
 
     metadata_summary_df = build_metadata_summary(
         root=root,

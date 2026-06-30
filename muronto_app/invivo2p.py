@@ -69,6 +69,8 @@ END_TIME_KEY: Final[str] = "end_time"
 # Imaging system / acquisition metadata
 # ------------------------------------------------------------------
 
+TSERIES_XML_FILENAME_KEY: Final[str] = "tseries_xml_filename"
+
 PRAIRIEVIEW_VERSION_KEY: Final[str] = "prairieview_version"
 
 INVIVO2P_SYSTEM_ID_KEY: Final[str] = "invivo2p_system_id"
@@ -150,7 +152,12 @@ IMAGING_REGION_KEY: Final[str] = "imaging_region"
 HEMISPHERE_KEY: Final[str] = "hemisphere"
 
 NUM_PLANES_KEY: Final[str] = "num_planes"
+
+PLANE_DEPTHS_KEY: Final[str] = "plane_depths"
 PLANE_RELATIVE_DEPTHS_KEY: Final[str] = "plane_relative_depths"
+LASER_POWER_AT_PLANE_DEPTHS_KEY: Final[str] = (
+    "laser_power_at_plane_depths"
+)
 
 PLANES_KEY: Final[str] = "planes"
 FOV_NOTES_KEY: Final[str] = "fov_notes"
@@ -226,7 +233,8 @@ SLM_OPTO_MODE_OPTIONS: Final[tuple[str, ...]] = (
     "Sequential Single Target",
 )
 
-INVIVO2P_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
+INVIVO2P_TSERIES_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
+    TSERIES_XML_FILENAME_KEY,
     PRAIRIEVIEW_VERSION_KEY,
     NUM_CHANNELS_RECORDED_KEY,
     CHANNEL_NUMBERS_RECORDED_KEY,
@@ -245,7 +253,9 @@ INVIVO2P_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
     PMT_GAIN_0_KEY,
     PMT_GAIN_1_KEY,
     NUM_PLANES_KEY,
+    PLANE_DEPTHS_KEY,
     PLANE_RELATIVE_DEPTHS_KEY,
+    LASER_POWER_AT_PLANE_DEPTHS_KEY,
     FRAME_COUNT_TOTAL_KEY,
     DURATION_S_KEY,
     FRAME_RATE_HZ_KEY,
@@ -825,7 +835,7 @@ def build_invivo2p_payload(
     raw_2p_sync_metadata_path: str = "",
     general_notes: str = "",
     attachments: Iterable[Mapping[str, object]] = (),
-    xml_metadata_values: Mapping[str, object] | None = None,
+    tseries_xml_metadata_values: Mapping[str, object] | None = None,
     allow_incomplete: bool = False,
     draft_id: str = "",
 ) -> dict[str, Any]:
@@ -962,7 +972,7 @@ def build_invivo2p_payload(
         INVIVO2P_SYSTEM_ID_KEY: cleaned_invivo2p_system_id,
         INVIVO2P_SOFTWARE_NAME_KEY: cleaned_invivo2p_software_name,
         BEHAVIOR_RIG_KEY: cleaned_behavior_rig,
-        **clean_xml_metadata_values(xml_metadata_values),
+        **clean_tseries_xml_metadata_values(tseries_xml_metadata_values),
         **channel_fields,
         NUM_FOVS_KEY: cleaned_num_fovs,
         FOVS_KEY: cleaned_fovs,
@@ -994,14 +1004,14 @@ def build_invivo2p_payload(
 
     return payload
 
-def clean_xml_metadata_values(
+def clean_tseries_xml_metadata_values(
     values: Mapping[str, object] | None,
 ) -> dict[str, object]:
     if not isinstance(values, Mapping):
         return {}
 
     cleaned: dict[str, object] = {}
-    for key in INVIVO2P_XML_METADATA_FIELD_KEYS:
+    for key in INVIVO2P_TSERIES_XML_METADATA_FIELD_KEYS:
         value = values.get(key)
         if value in ("", None):
             cleaned[key] = ""

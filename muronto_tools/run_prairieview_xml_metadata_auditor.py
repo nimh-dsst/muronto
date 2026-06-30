@@ -3,6 +3,7 @@ import sys
 import tkinter as tk
 from tkinter import filedialog
 import json
+import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,35 @@ def pick_xml_file() -> Path:
         raise SystemExit("No XML file selected.")
 
     return Path(file_path)
+
+
+def add_selected_filename_metadata(xml_path: Path, result: dict) -> None:
+    metadata = result.setdefault("metadata", {})
+    metadata["tseries_xml_filename"] = xml_path.name
+
+    metadata_summary = result.get("metadata_summary")
+    if metadata_summary is None:
+        return
+
+    filename_row = {
+        "category": "file_identity",
+        "variable": "tseries_xml_filename",
+        "value": xml_path.name,
+        "unit": "",
+        "source_scope": "file",
+        "xml_source": "selected file path",
+        "extraction_method": "file name from selected XML path",
+        "confidence": "high",
+        "notes": "",
+    }
+
+    result["metadata_summary"] = pd.concat(
+        [
+            pd.DataFrame([filename_row]),
+            metadata_summary,
+        ],
+        ignore_index=True,
+    )
 
 
 def export_outputs(xml_path: Path, result: dict) -> Path:
@@ -66,12 +96,22 @@ def export_manifest(
     manifest = {
         "source_xml": str(xml_path),
         "output_dir": str(output_dir),
+        "tseries_xml_filename": metadata.get(
+            "tseries_xml_filename",
+            xml_path.name,
+        ),
         "pv_version": metadata.get("pv_version", ""),
         "sequence_types": metadata.get("sequence_types", ""),
         "frame_count_total": metadata.get("frame_count_total", ""),
         "frame_rate_actual_hz": metadata.get("frame_rate_actual_hz", ""),
         "num_planes_inferred": metadata.get("num_planes_inferred", ""),
+        "plane_depths": metadata.get("plane_depths", ""),
         "plane_relative_depths": metadata.get("plane_relative_depths", ""),
+        "laser_power_at_plane_depths": metadata.get(
+            "laser_power_at_plane_depths",
+            "",
+        ),
+        "volume_rate_hz": metadata.get("volume_rate_hz", ""),
         "warnings": warnings,
         "outputs": [
             f"{xml_path.stem}_metadata_summary.csv",
@@ -88,18 +128,29 @@ def export_manifest(
     out_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(f"Saved: {out_path}")
 
+
 def print_report(result: dict) -> None:
     metadata = result.get("metadata", {})
 
     print("\n========================================")
     print("PrairieView Metadata Auditor")
+    print(f"File: {metadata.get('tseries_xml_filename', '')}")
     print("========================================")
     print(f"PV version: {metadata.get('pv_version', '')}")
     print(f"Sequence type: {metadata.get('sequence_types', '')}")
     print(f"Frames: {metadata.get('frame_count_total', '')}")
     print(f"Frame rate: {metadata.get('frame_rate_actual_hz', '')} Hz")
     print(f"Planes: {metadata.get('num_planes_inferred', '')}")
-    print(f"Plane depths: {metadata.get('plane_relative_depths', '')}")
+    print(f"Plane depths: {metadata.get('plane_depths', '')}")
+    print(
+        "Plane relative depths: "
+        f"{metadata.get('plane_relative_depths', '')}"
+    )
+    print(
+        "Laser power at plane depths: "
+        f"{metadata.get('laser_power_at_plane_depths', '')}"
+    )
+    print(f"Volume rate: {metadata.get('volume_rate_hz', '')} Hz")
     print("========================================\n")
 
 
@@ -107,6 +158,7 @@ def print_key_metadata_table(result: dict) -> None:
     metadata = result.get("metadata", {})
 
     variables = [
+        "tseries_xml_filename",
         "pv_version",
         "xml_date_time",
         "sequence_types",
@@ -149,7 +201,9 @@ def print_key_metadata_table(result: dict) -> None:
         "pmt_gain_0",
         "pmt_gain_1",
         "num_planes_inferred",
+        "plane_depths",
         "plane_relative_depths",
+        "laser_power_at_plane_depths",
         "plane_depth_source",
         "num_volumes_complete",
         "leftover_frames_after_complete_volumes",
@@ -163,10 +217,12 @@ def print_key_metadata_table(result: dict) -> None:
 
     print("=" * 60)
 
+
 def check_key_metadata_schema(result: dict) -> None:
     metadata = result.get("metadata", {})
 
     expected_variables = [
+        "tseries_xml_filename",
         "pv_version",
         "xml_date_time",
         "sequence_types",
@@ -175,6 +231,9 @@ def check_key_metadata_schema(result: dict) -> None:
         "resolution_pix",
         "fov_size_um",
         "num_planes_inferred",
+        "plane_depths",
+        "plane_relative_depths",
+        "laser_power_at_plane_depths",
     ]
 
     missing = [
@@ -191,6 +250,7 @@ def check_key_metadata_schema(result: dict) -> None:
     for variable in missing:
         print(f"- {variable}")
 
+
 def collect_warnings(result: dict) -> list[str]:
     metadata = result.get("metadata", {})
     warnings = []
@@ -206,6 +266,28 @@ def collect_warnings(result: dict) -> list[str]:
             f"Recording has {leftover} leftover frame(s) after complete volumes."
         )
 
+    num_planes = str(metadata.get("num_planes_inferred", ""))
+    plane_depths = str(metadata.get("plane_depths", ""))
+    laser_powers = str(metadata.get("laser_power_at_plane_depths", ""))
+
+    if num_planes not in ("", "1") and not laser_powers:
+        warnings.append(
+            "Multiple planes were detected, but laser_power_at_plane_depths is blank."
+        )
+
+    if plane_depths and laser_powers:
+        plane_depth_count = len(
+            [value for value in plane_depths.split(", ") if value]
+        )
+        laser_power_count = len(
+            [value for value in laser_powers.split(", ") if value]
+        )
+        if plane_depth_count != laser_power_count:
+            warnings.append(
+                "plane_depths and laser_power_at_plane_depths have different "
+                f"numbers of values ({plane_depth_count} vs {laser_power_count})."
+            )
+
     return warnings
 
 
@@ -218,13 +300,15 @@ def print_warnings(warnings: list[str]) -> None:
     for warning in warnings:
         print(f"- {warning}")
 
-        
+
 def main() -> None:
     xml_path = pick_xml_file()
     print(f"Selected XML: {xml_path}")
 
     xml_bytes = xml_path.read_bytes()
     result = parse_prairieview_xml_bytes(xml_bytes)
+
+    add_selected_filename_metadata(xml_path, result)
 
     output_dir = export_outputs(xml_path, result)
     warnings = collect_warnings(result)
@@ -233,6 +317,7 @@ def main() -> None:
     print_key_metadata_table(result)
     check_key_metadata_schema(result)
     print_warnings(warnings)
-    
+
+
 if __name__ == "__main__":
     main()

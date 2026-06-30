@@ -364,6 +364,7 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "Axons",
         "Dendrites",
         "Spines",
+        "Synapses",
         "NT Release Sites",
     ],
     RED_CHANNEL_SUBSTRATE_OPTIONS_KEY: [
@@ -371,6 +372,7 @@ DEFAULT_OPTIONS: Final[dict[str, list[str]]] = {
         "Axons",
         "Dendrites",
         "Spines",
+        "Synpases",
         "NT Release Sites",
     ],
 }
