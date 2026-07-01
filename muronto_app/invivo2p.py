@@ -190,6 +190,60 @@ VOLTAGE_ENABLED_CHANNEL_NAMES_KEY: Final[str] = (
     "voltage_enabled_channel_names"
 )
 
+
+# ------------------------------------------------------------------
+# MarkPoints
+# ------------------------------------------------------------------
+
+MARKPOINTS_XML_FILENAME_KEY: Final[str] = "markpoints_xml_filename"
+MARKPOINTS_SOURCE_TSERIES_KEY: Final[str] = "markpoints_source_tseries"
+MARKPOINTS_CYCLE_KEY: Final[str] = "markpoints_cycle"
+
+MARKPOINTS_UNCAGING_LASER_KEY: Final[str] = "markpoints_uncaging_laser"
+MARKPOINTS_UNCAGING_LASER_POWER_KEY: Final[str] = (
+    "markpoints_uncaging_laser_power"
+)
+
+MARKPOINTS_NUM_POINTS_KEY: Final[str] = "markpoints_num_points"
+MARKPOINTS_ITERATIONS_KEY: Final[str] = "markpoints_iterations"
+MARKPOINTS_REPETITIONS_KEY: Final[str] = "markpoints_repetitions"
+MARKPOINTS_ALL_POINTS_AT_ONCE_KEY: Final[str] = (
+    "markpoints_all_points_at_once"
+)
+MARKPOINTS_ALL_POINTS_SPIRAL_KEY: Final[str] = (
+    "markpoints_all_points_spiral"
+)
+MARKPOINTS_SPIRAL_REVOLUTIONS_KEY: Final[str] = (
+    "markpoints_spiral_revolutions"
+)
+MARKPOINTS_USE_3D_KEY: Final[str] = "markpoints_use_3d"
+
+MARKPOINTS_INITIAL_DELAY_MS_KEY: Final[str] = (
+    "markpoints_initial_delay_ms"
+)
+MARKPOINTS_INTER_POINT_DELAY_MS_KEY: Final[str] = (
+    "markpoints_inter_point_delay_ms"
+)
+MARKPOINTS_DURATION_MS_KEY: Final[str] = "markpoints_duration_ms"
+
+MARKPOINTS_POINT_INDICES_KEY: Final[str] = "markpoints_point_indices"
+MARKPOINTS_X_NORMALIZED_VALUES_KEY: Final[str] = (
+    "markpoints_x_normalized_values"
+)
+MARKPOINTS_Y_NORMALIZED_VALUES_KEY: Final[str] = (
+    "markpoints_y_normalized_values"
+)
+MARKPOINTS_CUSTOM_LASER_PERCENT_BY_POINT_KEY: Final[str] = (
+    "markpoints_custom_laser_percent_by_point"
+)
+MARKPOINTS_INFERRED_POINT_POWER_BY_POINT_KEY: Final[str] = (
+    "markpoints_inferred_point_power_by_point"
+)
+MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY: Final[str] = (
+    "markpoints_spiral_size_um_values"
+)
+
+
 # ------------------------------------------------------------------
 # Notes / attachments
 # ------------------------------------------------------------------
@@ -300,6 +354,29 @@ INVIVO2P_VOLTAGE_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
     VOLTAGE_ENABLED_CHANNEL_NAMES_KEY,
 )
 
+INVIVO2P_MARKPOINTS_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
+    MARKPOINTS_XML_FILENAME_KEY,
+    MARKPOINTS_SOURCE_TSERIES_KEY,
+    MARKPOINTS_CYCLE_KEY,
+    MARKPOINTS_UNCAGING_LASER_KEY,
+    MARKPOINTS_UNCAGING_LASER_POWER_KEY,
+    MARKPOINTS_NUM_POINTS_KEY,
+    MARKPOINTS_ITERATIONS_KEY,
+    MARKPOINTS_REPETITIONS_KEY,
+    MARKPOINTS_ALL_POINTS_AT_ONCE_KEY,
+    MARKPOINTS_ALL_POINTS_SPIRAL_KEY,
+    MARKPOINTS_SPIRAL_REVOLUTIONS_KEY,
+    MARKPOINTS_USE_3D_KEY,
+    MARKPOINTS_INITIAL_DELAY_MS_KEY,
+    MARKPOINTS_INTER_POINT_DELAY_MS_KEY,
+    MARKPOINTS_DURATION_MS_KEY,
+    MARKPOINTS_POINT_INDICES_KEY,
+    MARKPOINTS_X_NORMALIZED_VALUES_KEY,
+    MARKPOINTS_Y_NORMALIZED_VALUES_KEY,
+    MARKPOINTS_CUSTOM_LASER_PERCENT_BY_POINT_KEY,
+    MARKPOINTS_INFERRED_POINT_POWER_BY_POINT_KEY,
+    MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY,
+)
 
 
 class Invivo2pValidationError(ValueError):
@@ -877,6 +954,7 @@ def build_invivo2p_payload(
     attachments: Iterable[Mapping[str, object]] = (),
     tseries_xml_metadata_values: Mapping[str, object] | None = None,
     voltage_xml_metadata_values: Mapping[str, object] | None = None,
+    markpoints_xml_metadata_values: Mapping[str, object] | None = None,
     allow_incomplete: bool = False,
     draft_id: str = "",
 ) -> dict[str, Any]:
@@ -1015,6 +1093,7 @@ def build_invivo2p_payload(
         BEHAVIOR_RIG_KEY: cleaned_behavior_rig,
         **clean_tseries_xml_metadata_values(tseries_xml_metadata_values),
         **clean_voltage_xml_metadata_values(voltage_xml_metadata_values),
+        **clean_markpoints_xml_metadata_values(markpoints_xml_metadata_values),
         **channel_fields,
         NUM_FOVS_KEY: cleaned_num_fovs,
         FOVS_KEY: cleaned_fovs,
@@ -1071,6 +1150,23 @@ def clean_voltage_xml_metadata_values(
 
     cleaned: dict[str, object] = {}
     for key in INVIVO2P_VOLTAGE_XML_METADATA_FIELD_KEYS:
+        value = values.get(key)
+        if value in ("", None):
+            cleaned[key] = ""
+            continue
+        cleaned[key] = value
+
+    return cleaned
+
+
+def clean_markpoints_xml_metadata_values(
+    values: Mapping[str, object] | None,
+) -> dict[str, object]:
+    if not isinstance(values, Mapping):
+        return {}
+
+    cleaned: dict[str, object] = {}
+    for key in INVIVO2P_MARKPOINTS_XML_METADATA_FIELD_KEYS:
         value = values.get(key)
         if value in ("", None):
             cleaned[key] = ""

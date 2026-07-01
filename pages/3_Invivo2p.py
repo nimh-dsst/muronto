@@ -17,6 +17,10 @@ from muronto_app.voltage_xml_metadata_auditor import (
     parse_voltage_xml_bytes,
 )
 
+from muronto_app.markpoints_xml_metadata_auditor import (
+    parse_markpoints_xml_bytes,
+)
+
 from muronto_app.config import (
     BEHAVIOR_RIG_OPTIONS_KEY,
     BEHAVIOR_TASK_NAME_OPTIONS_KEY,
@@ -148,6 +152,27 @@ from muronto_app.invivo2p import (
     VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
     VOLTAGE_CHANNEL_NAMES_ALL_KEY,
     VOLTAGE_ENABLED_CHANNEL_NAMES_KEY,
+    MARKPOINTS_XML_FILENAME_KEY,
+    MARKPOINTS_SOURCE_TSERIES_KEY,
+    MARKPOINTS_CYCLE_KEY,
+    MARKPOINTS_UNCAGING_LASER_KEY,
+    MARKPOINTS_UNCAGING_LASER_POWER_KEY,
+    MARKPOINTS_NUM_POINTS_KEY,
+    MARKPOINTS_ITERATIONS_KEY,
+    MARKPOINTS_REPETITIONS_KEY,
+    MARKPOINTS_ALL_POINTS_AT_ONCE_KEY,
+    MARKPOINTS_ALL_POINTS_SPIRAL_KEY,
+    MARKPOINTS_SPIRAL_REVOLUTIONS_KEY,
+    MARKPOINTS_USE_3D_KEY,
+    MARKPOINTS_INITIAL_DELAY_MS_KEY,
+    MARKPOINTS_INTER_POINT_DELAY_MS_KEY,
+    MARKPOINTS_DURATION_MS_KEY,
+    MARKPOINTS_POINT_INDICES_KEY,
+    MARKPOINTS_X_NORMALIZED_VALUES_KEY,
+    MARKPOINTS_Y_NORMALIZED_VALUES_KEY,
+    MARKPOINTS_CUSTOM_LASER_PERCENT_BY_POINT_KEY,
+    MARKPOINTS_INFERRED_POINT_POWER_BY_POINT_KEY,
+    MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY,
     ZOOM_KEY,
     NUM_CHANNELS_RECORDED_KEY,
     CHANNEL_NUMBERS_RECORDED_KEY,
@@ -180,6 +205,7 @@ from muronto_app.invivo2p import (
 
 INVIVO2P_TSERIES_XML_METADATA_KEY = "invivo2p_tseries_xml_metadata"
 INVIVO2P_VOLTAGE_XML_METADATA_KEY = "invivo2p_voltage_xml_metadata"
+INVIVO2P_MARKPOINTS_XML_METADATA_KEY = "invivo2p_markpoints_xml_metadata"
 
 COMMON_BEHAVIOR_TASK_PHASE_OPTIONS = (
     "Habituation",
@@ -1836,6 +1862,149 @@ def render_prairieview_voltage_xml_import(*, form_key: str) -> dict[str, Any]:
         return muronto_voltage_metadata
 
 
+def render_prairieview_markpoints_xml_import(*, form_key: str) -> dict[str, Any]:
+    def metadata_value(markpoints_metadata: Mapping[str, Any], key: str) -> object:
+        value = markpoints_metadata.get(key, "")
+        return "" if value is None else value
+
+    def prairieview_markpoints_to_muronto_metadata(
+        markpoints_metadata: Mapping[str, Any],
+    ) -> dict[str, object]:
+        return {
+            MARKPOINTS_XML_FILENAME_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_xml_filename",
+            ),
+            MARKPOINTS_SOURCE_TSERIES_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_source_tseries",
+            ),
+            MARKPOINTS_CYCLE_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_cycle",
+            ),
+            MARKPOINTS_UNCAGING_LASER_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_uncaging_laser",
+            ),
+            MARKPOINTS_UNCAGING_LASER_POWER_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_uncaging_laser_power",
+            ),
+            MARKPOINTS_NUM_POINTS_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_num_points",
+            ),
+            MARKPOINTS_ITERATIONS_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_iterations",
+            ),
+            MARKPOINTS_REPETITIONS_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_repetitions",
+            ),
+            MARKPOINTS_ALL_POINTS_AT_ONCE_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_all_points_at_once",
+            ),
+            MARKPOINTS_ALL_POINTS_SPIRAL_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_all_points_spiral",
+            ),
+            MARKPOINTS_SPIRAL_REVOLUTIONS_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_spiral_revolutions",
+            ),
+            MARKPOINTS_USE_3D_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_use_3d",
+            ),
+            MARKPOINTS_INITIAL_DELAY_MS_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_initial_delay_ms",
+            ),
+            MARKPOINTS_INTER_POINT_DELAY_MS_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_inter_point_delay_ms",
+            ),
+            MARKPOINTS_DURATION_MS_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_duration_ms",
+            ),
+            MARKPOINTS_POINT_INDICES_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_point_indices",
+            ),
+            MARKPOINTS_X_NORMALIZED_VALUES_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_x_normalized_values",
+            ),
+            MARKPOINTS_Y_NORMALIZED_VALUES_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_y_normalized_values",
+            ),
+            MARKPOINTS_CUSTOM_LASER_PERCENT_BY_POINT_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_custom_laser_percent_by_point",
+            ),
+            MARKPOINTS_INFERRED_POINT_POWER_BY_POINT_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_inferred_point_power_by_point",
+            ),
+            MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY: metadata_value(
+                markpoints_metadata,
+                "markpoints_spiral_size_um_values",
+            ),
+        }
+
+    with st.expander(
+        "PrairieView MarkPoints XML Metadata Import",
+        expanded=True,
+    ):
+        uploaded_markpoints_xml = st.file_uploader(
+            "PrairieView MarkPoints XML file",
+            type=["xml"],
+            key=invivo2p_key(form_key, "prairieview_markpoints_xml_upload"),
+        )
+
+        if uploaded_markpoints_xml is None:
+            return {}
+
+        try:
+            parsed_markpoints = parse_markpoints_xml_bytes(
+                uploaded_markpoints_xml.getvalue(),
+                filename=uploaded_markpoints_xml.name,
+            )
+        except Exception as exc:
+            st.error(f"Unable to parse PrairieView MarkPoints XML: {exc}")
+            return {}
+
+        markpoints_metadata = parsed_markpoints.get("metadata", {})
+        if not isinstance(markpoints_metadata, Mapping):
+            st.error("Parsed PrairieView MarkPoints XML did not contain metadata.")
+            return {}
+
+        muronto_markpoints_metadata = (
+            prairieview_markpoints_to_muronto_metadata(markpoints_metadata)
+        )
+
+        st.success("Parsed PrairieView MarkPoints XML.")
+
+        with st.expander("Preview mapped MarkPoints XML metadata", expanded=True):
+            st.json(muronto_markpoints_metadata)
+
+        if st.button(
+            "Apply MarkPoints XML metadata to record",
+            key=invivo2p_key(form_key, "apply_markpoints_xml_metadata"),
+            use_container_width=True,
+        ):
+            st.session_state[
+                invivo2p_key(form_key, INVIVO2P_MARKPOINTS_XML_METADATA_KEY)
+            ] = muronto_markpoints_metadata
+            st.rerun()
+
+        return muronto_markpoints_metadata
+
 
 def render_prairieview_voltage_metadata_display(
     *,
@@ -1943,6 +2112,165 @@ def render_prairieview_voltage_metadata_display(
     return metadata_values
 
 
+def render_prairieview_markpoints_metadata_display(
+    *,
+    form_key: str,
+    defaults: Mapping[str, Any] | None = None,
+) -> dict[str, object]:
+    defaults = defaults or {}
+
+    markpoints_metadata = st.session_state.get(
+        invivo2p_key(form_key, INVIVO2P_MARKPOINTS_XML_METADATA_KEY),
+        {},
+    )
+    if not isinstance(markpoints_metadata, Mapping):
+        markpoints_metadata = {}
+
+    displayed_markpoints_metadata = {
+        key: markpoints_metadata.get(key, defaults.get(key, ""))
+        for key in (
+            MARKPOINTS_XML_FILENAME_KEY,
+            MARKPOINTS_SOURCE_TSERIES_KEY,
+            MARKPOINTS_CYCLE_KEY,
+            MARKPOINTS_UNCAGING_LASER_KEY,
+            MARKPOINTS_UNCAGING_LASER_POWER_KEY,
+            MARKPOINTS_NUM_POINTS_KEY,
+            MARKPOINTS_ITERATIONS_KEY,
+            MARKPOINTS_REPETITIONS_KEY,
+            MARKPOINTS_ALL_POINTS_AT_ONCE_KEY,
+            MARKPOINTS_ALL_POINTS_SPIRAL_KEY,
+            MARKPOINTS_SPIRAL_REVOLUTIONS_KEY,
+            MARKPOINTS_USE_3D_KEY,
+            MARKPOINTS_INITIAL_DELAY_MS_KEY,
+            MARKPOINTS_INTER_POINT_DELAY_MS_KEY,
+            MARKPOINTS_DURATION_MS_KEY,
+            MARKPOINTS_POINT_INDICES_KEY,
+            MARKPOINTS_X_NORMALIZED_VALUES_KEY,
+            MARKPOINTS_Y_NORMALIZED_VALUES_KEY,
+            MARKPOINTS_CUSTOM_LASER_PERCENT_BY_POINT_KEY,
+            MARKPOINTS_INFERRED_POINT_POWER_BY_POINT_KEY,
+            MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY,
+        )
+    }
+
+    metadata_values: dict[str, str] = {}
+
+    metadata_values.update(
+        render_metadata_section(
+            "File",
+            (
+                ("File Name", MARKPOINTS_XML_FILENAME_KEY, ""),
+                ("Source TSeries", MARKPOINTS_SOURCE_TSERIES_KEY, ""),
+                ("Cycle", MARKPOINTS_CYCLE_KEY, ""),
+            ),
+            displayed_markpoints_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Laser",
+            (
+                ("SLM Laser", MARKPOINTS_UNCAGING_LASER_KEY, ""),
+                (
+                    "SLM Laser Global Power",
+                    MARKPOINTS_UNCAGING_LASER_POWER_KEY,
+                    "",
+                ),
+            ),
+            displayed_markpoints_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Stimulation Features",
+            (
+                ("Num of MarkPoints", MARKPOINTS_NUM_POINTS_KEY, ""),
+                ("Iterations", MARKPOINTS_ITERATIONS_KEY, ""),
+                ("Repetitions", MARKPOINTS_REPETITIONS_KEY, ""),
+                (
+                    "All MarkPoints At Once",
+                    MARKPOINTS_ALL_POINTS_AT_ONCE_KEY,
+                    "",
+                ),
+                (
+                    "All MarkPoints Spiral",
+                    MARKPOINTS_ALL_POINTS_SPIRAL_KEY,
+                    "",
+                ),
+                (
+                    "Spiral Revolutions",
+                    MARKPOINTS_SPIRAL_REVOLUTIONS_KEY,
+                    "",
+                ),
+                ("MarkPoints Use 3D", MARKPOINTS_USE_3D_KEY, ""),
+            ),
+            displayed_markpoints_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Stimulation Timing",
+            (
+                (
+                    "Initial Delay",
+                    MARKPOINTS_INITIAL_DELAY_MS_KEY,
+                    " ms",
+                ),
+                (
+                    "Inter-MarkPoint Delay",
+                    MARKPOINTS_INTER_POINT_DELAY_MS_KEY,
+                    " ms",
+                ),
+                (
+                    "Stimulus Duration",
+                    MARKPOINTS_DURATION_MS_KEY,
+                    " ms",
+                ),
+            ),
+            displayed_markpoints_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "MarkPoint Features",
+            (
+                ("MarkPoint Indices", MARKPOINTS_POINT_INDICES_KEY, ""),
+                (
+                    "MarkPoint Norm X Pos",
+                    MARKPOINTS_X_NORMALIZED_VALUES_KEY,
+                    "",
+                ),
+                (
+                    "MarkPoint Norm Y Pos",
+                    MARKPOINTS_Y_NORMALIZED_VALUES_KEY,
+                    "",
+                ),
+                (
+                    "Laser Proportion by MarkPoint",
+                    MARKPOINTS_CUSTOM_LASER_PERCENT_BY_POINT_KEY,
+                    "",
+                ),
+                (
+                    "Inferred Laser Power by MarkPoint",
+                    MARKPOINTS_INFERRED_POINT_POWER_BY_POINT_KEY,
+                    "",
+                ),
+                (
+                    "Spiral Size by MarkPoint",
+                    MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY,
+                    " µm",
+                ),
+            ),
+            displayed_markpoints_metadata,
+        )
+    )
+
+    return metadata_values
+
 
 def render_invivo2p_form(
     *,
@@ -2042,6 +2370,38 @@ def render_invivo2p_form(
             )
         }    
 
+    markpoints_xml_metadata_state_key = invivo2p_key(
+        form_key,
+        INVIVO2P_MARKPOINTS_XML_METADATA_KEY,
+    )
+    if markpoints_xml_metadata_state_key not in st.session_state:
+        st.session_state[markpoints_xml_metadata_state_key] = {
+            key: payload_defaults.get(key, "")
+            for key in (
+                MARKPOINTS_XML_FILENAME_KEY,
+                MARKPOINTS_SOURCE_TSERIES_KEY,
+                MARKPOINTS_CYCLE_KEY,
+                MARKPOINTS_UNCAGING_LASER_KEY,
+                MARKPOINTS_UNCAGING_LASER_POWER_KEY,
+                MARKPOINTS_NUM_POINTS_KEY,
+                MARKPOINTS_ITERATIONS_KEY,
+                MARKPOINTS_REPETITIONS_KEY,
+                MARKPOINTS_ALL_POINTS_AT_ONCE_KEY,
+                MARKPOINTS_ALL_POINTS_SPIRAL_KEY,
+                MARKPOINTS_SPIRAL_REVOLUTIONS_KEY,
+                MARKPOINTS_USE_3D_KEY,
+                MARKPOINTS_INITIAL_DELAY_MS_KEY,
+                MARKPOINTS_INTER_POINT_DELAY_MS_KEY,
+                MARKPOINTS_DURATION_MS_KEY,
+                MARKPOINTS_POINT_INDICES_KEY,
+                MARKPOINTS_X_NORMALIZED_VALUES_KEY,
+                MARKPOINTS_Y_NORMALIZED_VALUES_KEY,
+                MARKPOINTS_CUSTOM_LASER_PERCENT_BY_POINT_KEY,
+                MARKPOINTS_INFERRED_POINT_POWER_BY_POINT_KEY,
+                MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY,
+            )
+        }   
+    
     existing_references = existing_attachment_references(payload_defaults)
     options = normalize_options(config.get(OPTIONS_KEY))
 
@@ -2113,7 +2473,24 @@ def render_invivo2p_form(
                     defaults=payload_defaults,
                 )
             )
-    
+
+        st.divider()
+        st.markdown("### PrairieView MarkPoints Metadata")
+
+        render_prairieview_markpoints_xml_import(
+            form_key=form_key,
+        )
+
+        if st.session_state.get(
+            invivo2p_key(form_key, INVIVO2P_MARKPOINTS_XML_METADATA_KEY)
+        ):
+            imaging_values.update(
+                render_prairieview_markpoints_metadata_display(
+                    form_key=form_key,
+                    defaults=payload_defaults,
+                )
+            )
+   
     raw_data_paths = render_raw_data_paths(
         form_key=form_key,
         defaults=payload_defaults,
@@ -2177,6 +2554,10 @@ def render_invivo2p_form(
             ),
             voltage_xml_metadata_values=st.session_state.get(
                 invivo2p_key(form_key, INVIVO2P_VOLTAGE_XML_METADATA_KEY),
+                imaging_values,
+            ),
+            markpoints_xml_metadata_values=st.session_state.get(
+                invivo2p_key(form_key, INVIVO2P_MARKPOINTS_XML_METADATA_KEY),
                 imaging_values,
             ),
             green_construct=clean_string(channel_values[GREEN_CONSTRUCT_KEY]),
