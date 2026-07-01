@@ -185,6 +185,10 @@ VOLTAGE_CHANNEL_NUMBERS_ALL_KEY: Final[str] = "voltage_channel_numbers_all"
 VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY: Final[str] = (
     "voltage_enabled_channel_numbers"
 )
+VOLTAGE_CHANNEL_NAMES_ALL_KEY: Final[str] = "voltage_channel_names_all"
+VOLTAGE_ENABLED_CHANNEL_NAMES_KEY: Final[str] = (
+    "voltage_enabled_channel_names"
+)
 
 # ------------------------------------------------------------------
 # Notes / attachments
@@ -291,7 +295,9 @@ INVIVO2P_VOLTAGE_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
     VOLTAGE_ACQUISITION_TIME_CONFIGURED_S_KEY,
     VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
     VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
+    VOLTAGE_CHANNEL_NAMES_ALL_KEY,
     VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+    VOLTAGE_ENABLED_CHANNEL_NAMES_KEY,
 )
 
 

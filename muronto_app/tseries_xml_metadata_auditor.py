@@ -1,4 +1,4 @@
-# prairieview_xml_metadata_auditor.py
+# tseries_xml_metadata_auditor.py
 
 from __future__ import annotations
 
@@ -536,8 +536,11 @@ def infer_planes(
                 plane_depth = (
                     frame_depth_value
                     if frame_depth_value is not None
-                    else focus
+                    else global_depth_value
                 )
+
+                if plane_depth is None:
+                    plane_depth = focus
 
                 if plane_depth is None:
                     plane_depth = 0.0
@@ -549,7 +552,7 @@ def infer_planes(
                 )
 
                 if plane_source == depth_col and frame_depth_value is None:
-                    plane_source = f"{depth_col} + Z Focus fallback"
+                    plane_source = f"{depth_col} + Piezo global fallback"
 
             else:
                 raw_depth = (
@@ -1021,17 +1024,17 @@ def metadata_summary_to_dict(metadata_summary_df: pd.DataFrame) -> dict[str, Any
 # ---------------------------------------------------------------------
 
 
-def parse_prairieview_xml_bytes(xml_bytes: bytes) -> dict[str, Any]:
+def parse_tseries_xml_bytes(xml_bytes: bytes) -> dict[str, Any]:
     root = ET.parse(io.BytesIO(xml_bytes)).getroot()
-    return parse_prairieview_root(root)
+    return parse_tseries_root(root)
 
 
-def parse_prairieview_xml_path(xml_path: str | Path) -> dict[str, Any]:
+def parse_tseries_xml_path(xml_path: str | Path) -> dict[str, Any]:
     root = ET.parse(xml_path).getroot()
-    return parse_prairieview_root(root)
+    return parse_tseries_root(root)
 
 
-def parse_prairieview_root(root: ET.Element) -> dict[str, Any]:
+def parse_tseries_root(root: ET.Element) -> dict[str, Any]:
     global_state = parse_global_state(root)
     sequence_df = parse_sequences(root)
     frame_df, file_df = parse_frames(root)

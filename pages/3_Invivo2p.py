@@ -9,8 +9,8 @@ from uuid import uuid4
 import streamlit as st
 from labapi import ApiError
 
-from muronto_app.prairieview_xml_metadata_auditor import (
-    parse_prairieview_xml_bytes,
+from muronto_app.tseries_xml_metadata_auditor import (
+    parse_tseries_xml_bytes,
 )
 
 from muronto_app.voltage_xml_metadata_auditor import (
@@ -146,6 +146,8 @@ from muronto_app.invivo2p import (
     VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
     VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
     VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+    VOLTAGE_CHANNEL_NAMES_ALL_KEY,
+    VOLTAGE_ENABLED_CHANNEL_NAMES_KEY,
     ZOOM_KEY,
     NUM_CHANNELS_RECORDED_KEY,
     CHANNEL_NUMBERS_RECORDED_KEY,
@@ -1689,7 +1691,7 @@ def render_prairieview_tseries_xml_import(*, form_key: str) -> dict[str, Any]:
             return {}
 
         try:
-            parsed_tseries = parse_prairieview_xml_bytes(uploaded_tseries_xml.getvalue())
+            parsed_tseries = parse_tseries_xml_bytes(uploaded_tseries_xml.getvalue())
         except Exception as exc:
             st.error(f"Unable to parse PrairieView TSeries XML: {exc}")
             return {}
@@ -1768,6 +1770,14 @@ def render_prairieview_voltage_xml_import(*, form_key: str) -> dict[str, Any]:
             VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY: metadata_value(
                 voltage_metadata,
                 "voltage_enabled_channel_numbers",
+            ),
+            VOLTAGE_CHANNEL_NAMES_ALL_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_channel_names_all",
+            ),
+            VOLTAGE_ENABLED_CHANNEL_NAMES_KEY: metadata_value(
+                voltage_metadata,
+                "voltage_enabled_channel_names",
             ),
         }
 
@@ -1853,6 +1863,8 @@ def render_prairieview_voltage_metadata_display(
             VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
             VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
             VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+            VOLTAGE_CHANNEL_NAMES_ALL_KEY,
+            VOLTAGE_ENABLED_CHANNEL_NAMES_KEY,
         )
     }
 
@@ -1860,10 +1872,19 @@ def render_prairieview_voltage_metadata_display(
 
     metadata_values.update(
         render_metadata_section(
-            "Voltage Recording",
+            "File",
             (
                 ("File Name", VOLTAGE_DATA_FILE_KEY, ""),
                 ("Voltage Exp Name", VOLTAGE_EXPERIMENT_NAME_KEY, ""),
+            ),
+            displayed_voltage_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Timing",
+            (
                 ("Voltage Samples Acquired", VOLTAGE_SAMPLES_ACQUIRED_KEY, ""),
                 (
                     "Voltage Sampling Rate",
@@ -1885,14 +1906,33 @@ def render_prairieview_voltage_metadata_display(
                     VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
                     "",
                 ),
+            ),
+            displayed_voltage_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Channels",
+            (
                 (
                     "Voltage Channel Numbers",
                     VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
                     "",
                 ),
                 (
+                    "Voltage Channel Names",
+                    VOLTAGE_CHANNEL_NAMES_ALL_KEY,
+                    "",
+                ),
+                (
                     "Voltage Channels Enabled",
                     VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+                    "",
+                ),
+                (
+                    "Enabled Voltage Channel Names",
+                    VOLTAGE_ENABLED_CHANNEL_NAMES_KEY,
                     "",
                 ),
             ),
@@ -1997,6 +2037,8 @@ def render_invivo2p_form(
                 VOLTAGE_DURATION_MATCHES_CONFIGURED_KEY,
                 VOLTAGE_CHANNEL_NUMBERS_ALL_KEY,
                 VOLTAGE_ENABLED_CHANNEL_NUMBERS_KEY,
+                VOLTAGE_CHANNEL_NAMES_ALL_KEY,
+                VOLTAGE_ENABLED_CHANNEL_NAMES_KEY,
             )
         }    
 

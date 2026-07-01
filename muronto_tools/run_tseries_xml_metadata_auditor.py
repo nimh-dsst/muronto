@@ -11,8 +11,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from muronto_app.prairieview_xml_metadata_auditor import (
-    parse_prairieview_xml_bytes,
+from muronto_app.tseries_xml_metadata_auditor import (
+    parse_tseries_xml_bytes,
 )
 
 
@@ -306,7 +306,7 @@ def main() -> None:
     print(f"Selected XML: {xml_path}")
 
     xml_bytes = xml_path.read_bytes()
-    result = parse_prairieview_xml_bytes(xml_bytes)
+    result = parse_tseries_xml_bytes(xml_bytes)
 
     add_selected_filename_metadata(xml_path, result)
 
