@@ -21,6 +21,10 @@ from muronto_app.markpoints_xml_metadata_auditor import (
     parse_markpoints_xml_bytes,
 )
 
+from muronto_app.singleimage_xml_metadata_auditor import (
+    parse_singleimage_xml_bytes,
+)
+
 from muronto_app.config import (
     BEHAVIOR_RIG_OPTIONS_KEY,
     BEHAVIOR_TASK_NAME_OPTIONS_KEY,
@@ -173,6 +177,24 @@ from muronto_app.invivo2p import (
     MARKPOINTS_CUSTOM_LASER_PERCENT_BY_POINT_KEY,
     MARKPOINTS_INFERRED_POINT_POWER_BY_POINT_KEY,
     MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY,
+    SINGLEIMAGE_XML_FILENAME_KEY,
+    SINGLEIMAGE_PRAIRIEVIEW_VERSION_KEY,
+    SINGLEIMAGE_OBJECTIVE_KEY,
+    SINGLEIMAGE_OBJECTIVE_MAGNIFICATION_KEY, 
+    SINGLEIMAGE_OBJECTIVE_NA_KEY, 
+    SINGLEIMAGE_NUM_CHANNELS_RECORDED_KEY,
+    SINGLEIMAGE_CHANNEL_NUMBERS_RECORDED_KEY,
+    SINGLEIMAGE_CHANNEL_NAMES_RECORDED_KEY,
+    SINGLEIMAGE_PMT_GAIN_0_KEY,
+    SINGLEIMAGE_PMT_GAIN_1_KEY,
+    SINGLEIMAGE_STAGE_X_KEY,
+    SINGLEIMAGE_STAGE_Y_KEY,
+    SINGLEIMAGE_Z_FOCUS_KEY,
+    SINGLEIMAGE_ZOOM_KEY,
+    SINGLEIMAGE_LASER_WAVELENGTH_NM_KEY,
+    SINGLEIMAGE_LASER_POWER_KEY,
+    SINGLEIMAGE_FOV_SIZE_UM_KEY,
+    SINGLEIMAGE_RESOLUTION_PIX_KEY,
     ZOOM_KEY,
     NUM_CHANNELS_RECORDED_KEY,
     CHANNEL_NUMBERS_RECORDED_KEY,
@@ -206,6 +228,7 @@ from muronto_app.invivo2p import (
 INVIVO2P_TSERIES_XML_METADATA_KEY = "invivo2p_tseries_xml_metadata"
 INVIVO2P_VOLTAGE_XML_METADATA_KEY = "invivo2p_voltage_xml_metadata"
 INVIVO2P_MARKPOINTS_XML_METADATA_KEY = "invivo2p_markpoints_xml_metadata"
+INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY = "invivo2p_singleimage_xml_metadata"
 
 COMMON_BEHAVIOR_TASK_PHASE_OPTIONS = (
     "Habituation",
@@ -2006,6 +2029,138 @@ def render_prairieview_markpoints_xml_import(*, form_key: str) -> dict[str, Any]
         return muronto_markpoints_metadata
 
 
+def render_prairieview_singleimage_xml_import(*, form_key: str) -> dict[str, Any]:
+    def metadata_value(singleimage_metadata: Mapping[str, Any], key: str) -> object:
+        value = singleimage_metadata.get(key, "")
+        return "" if value is None else value
+
+    def prairieview_singleimage_to_muronto_metadata(
+        singleimage_metadata: Mapping[str, Any],
+    ) -> dict[str, object]:
+        return {
+            SINGLEIMAGE_XML_FILENAME_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_xml_filename",
+            ),
+            SINGLEIMAGE_PRAIRIEVIEW_VERSION_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_pv_version",
+            ),
+            SINGLEIMAGE_OBJECTIVE_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_objective_name",
+            ),
+            SINGLEIMAGE_OBJECTIVE_MAGNIFICATION_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_objective_magnification",
+            ),
+            SINGLEIMAGE_OBJECTIVE_NA_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_objective_na",
+            ),
+            SINGLEIMAGE_NUM_CHANNELS_RECORDED_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_num_channels_recorded",
+            ),
+            SINGLEIMAGE_CHANNEL_NUMBERS_RECORDED_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_channel_numbers_recorded",
+            ),
+            SINGLEIMAGE_CHANNEL_NAMES_RECORDED_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_channel_names_recorded",
+            ),
+            SINGLEIMAGE_PMT_GAIN_0_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_pmt_gain_0",
+            ),
+            SINGLEIMAGE_PMT_GAIN_1_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_pmt_gain_1",
+            ),
+            SINGLEIMAGE_STAGE_X_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_stage_x",
+            ),
+            SINGLEIMAGE_STAGE_Y_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_stage_y",
+            ),
+            SINGLEIMAGE_Z_FOCUS_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_z_focus",
+            ),
+            SINGLEIMAGE_ZOOM_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_optical_zoom",
+            ),
+            SINGLEIMAGE_LASER_WAVELENGTH_NM_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_laser_wavelength_nm",
+            ),
+            SINGLEIMAGE_LASER_POWER_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_laser_power_0",
+            ),
+            SINGLEIMAGE_FOV_SIZE_UM_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_fov_size_um",
+            ),
+            SINGLEIMAGE_RESOLUTION_PIX_KEY: metadata_value(
+                singleimage_metadata,
+                "singleimage_resolution_pix",
+            ),
+        }
+
+    with st.expander(
+        "PrairieView SingleImage XML Metadata Import",
+        expanded=True,
+    ):
+        uploaded_singleimage_xml = st.file_uploader(
+            "PrairieView SingleImage XML file",
+            type=["xml"],
+            key=invivo2p_key(form_key, "prairieview_singleimage_xml_upload"),
+        )
+
+        if uploaded_singleimage_xml is None:
+            return {}
+
+        try:
+            parsed_singleimage = parse_singleimage_xml_bytes(
+                uploaded_singleimage_xml.getvalue(),
+                filename=uploaded_singleimage_xml.name,
+            )
+        except Exception as exc:
+            st.error(f"Unable to parse PrairieView SingleImage XML: {exc}")
+            return {}
+
+        singleimage_metadata = parsed_singleimage.get("metadata", {})
+        if not isinstance(singleimage_metadata, Mapping):
+            st.error("Parsed PrairieView SingleImage XML did not contain metadata.")
+            return {}
+
+        muronto_singleimage_metadata = (
+            prairieview_singleimage_to_muronto_metadata(singleimage_metadata)
+        )
+
+        st.success("Parsed PrairieView SingleImage XML.")
+
+        with st.expander("Preview mapped SingleImage XML metadata", expanded=True):
+            st.json(muronto_singleimage_metadata)
+
+        if st.button(
+            "Apply SingleImage XML metadata to record",
+            key=invivo2p_key(form_key, "apply_singleimage_xml_metadata"),
+            use_container_width=True,
+        ):
+            st.session_state[
+                invivo2p_key(form_key, INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY)
+            ] = muronto_singleimage_metadata
+            st.rerun()
+
+        return muronto_singleimage_metadata
+    
+
 def render_prairieview_voltage_metadata_display(
     *,
     form_key: str,
@@ -2272,6 +2427,158 @@ def render_prairieview_markpoints_metadata_display(
     return metadata_values
 
 
+def render_prairieview_singleimage_metadata_display(
+    *,
+    form_key: str,
+    defaults: Mapping[str, Any] | None = None,
+) -> dict[str, object]:
+    defaults = defaults or {}
+
+    singleimage_metadata = st.session_state.get(
+        invivo2p_key(form_key, INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY),
+        {},
+    )
+    if not isinstance(singleimage_metadata, Mapping):
+        singleimage_metadata = {}
+
+    displayed_singleimage_metadata = {
+        key: singleimage_metadata.get(key, defaults.get(key, ""))
+        for key in (
+            SINGLEIMAGE_XML_FILENAME_KEY,
+            SINGLEIMAGE_PRAIRIEVIEW_VERSION_KEY,
+            SINGLEIMAGE_OBJECTIVE_KEY,
+            SINGLEIMAGE_OBJECTIVE_MAGNIFICATION_KEY,
+            SINGLEIMAGE_OBJECTIVE_NA_KEY,
+            SINGLEIMAGE_NUM_CHANNELS_RECORDED_KEY,
+            SINGLEIMAGE_CHANNEL_NUMBERS_RECORDED_KEY,
+            SINGLEIMAGE_CHANNEL_NAMES_RECORDED_KEY,
+            SINGLEIMAGE_PMT_GAIN_0_KEY,
+            SINGLEIMAGE_PMT_GAIN_1_KEY,
+            SINGLEIMAGE_STAGE_X_KEY,
+            SINGLEIMAGE_STAGE_Y_KEY,
+            SINGLEIMAGE_Z_FOCUS_KEY,
+            SINGLEIMAGE_ZOOM_KEY,
+            SINGLEIMAGE_LASER_WAVELENGTH_NM_KEY,
+            SINGLEIMAGE_LASER_POWER_KEY,
+            SINGLEIMAGE_FOV_SIZE_UM_KEY,
+            SINGLEIMAGE_RESOLUTION_PIX_KEY,
+        )
+    }
+
+    metadata_values: dict[str, str] = {}
+
+    metadata_values.update(
+        render_metadata_section(
+            "File",
+            (
+                ("File Name", SINGLEIMAGE_XML_FILENAME_KEY, ""),
+            ),
+            displayed_singleimage_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Software",
+            (
+                (
+                    "PrairieView Version",
+                    SINGLEIMAGE_PRAIRIEVIEW_VERSION_KEY,
+                    "",
+                ),
+            ),
+            displayed_singleimage_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Objective",
+            (
+                ("Name", SINGLEIMAGE_OBJECTIVE_KEY, ""),
+                (
+                    "Magnification",
+                    SINGLEIMAGE_OBJECTIVE_MAGNIFICATION_KEY,
+                    "×",
+                ),
+                (
+                    "Numerical Aperture",
+                    SINGLEIMAGE_OBJECTIVE_NA_KEY,
+                    "",
+                ),
+            ),
+            displayed_singleimage_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Channels",
+            (
+                (
+                    "Number Recorded",
+                    SINGLEIMAGE_NUM_CHANNELS_RECORDED_KEY,
+                    "",
+                ),
+                (
+                    "Channel Numbers",
+                    SINGLEIMAGE_CHANNEL_NUMBERS_RECORDED_KEY,
+                    "",
+                ),
+                (
+                    "Channel Names",
+                    SINGLEIMAGE_CHANNEL_NAMES_RECORDED_KEY,
+                    "",
+                ),
+            ),
+            displayed_singleimage_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "PMTs",
+            (
+                ("PMT 0 Gain", SINGLEIMAGE_PMT_GAIN_0_KEY, ""),
+                ("PMT 1 Gain", SINGLEIMAGE_PMT_GAIN_1_KEY, ""),
+            ),
+            displayed_singleimage_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Stage",
+            (
+                ("X", SINGLEIMAGE_STAGE_X_KEY, ""),
+                ("Y", SINGLEIMAGE_STAGE_Y_KEY, ""),
+                ("Z Focus", SINGLEIMAGE_Z_FOCUS_KEY, ""),
+            ),
+            displayed_singleimage_metadata,
+        )
+    )
+
+    metadata_values.update(
+        render_metadata_section(
+            "Imaging",
+            (
+                ("Zoom", SINGLEIMAGE_ZOOM_KEY, ""),
+                (
+                    "Laser Wavelength",
+                    SINGLEIMAGE_LASER_WAVELENGTH_NM_KEY,
+                    " nm",
+                ),
+                ("Laser Power", SINGLEIMAGE_LASER_POWER_KEY, ""),
+                ("FOV Size", SINGLEIMAGE_FOV_SIZE_UM_KEY, " µm"),
+                ("Resolution", SINGLEIMAGE_RESOLUTION_PIX_KEY, ""),
+            ),
+            displayed_singleimage_metadata,
+        )
+    )
+
+    return metadata_values
+
+
 def render_invivo2p_form(
     *,
     notebook: Any,
@@ -2402,6 +2709,35 @@ def render_invivo2p_form(
             )
         }   
     
+    singleimage_xml_metadata_state_key = invivo2p_key(
+        form_key,
+        INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY,
+    )
+    if singleimage_xml_metadata_state_key not in st.session_state:
+        st.session_state[singleimage_xml_metadata_state_key] = {
+            key: payload_defaults.get(key, "")
+            for key in (
+                SINGLEIMAGE_XML_FILENAME_KEY,
+                SINGLEIMAGE_PRAIRIEVIEW_VERSION_KEY,
+                SINGLEIMAGE_OBJECTIVE_KEY,
+                SINGLEIMAGE_OBJECTIVE_MAGNIFICATION_KEY,
+                SINGLEIMAGE_OBJECTIVE_NA_KEY,
+                SINGLEIMAGE_NUM_CHANNELS_RECORDED_KEY,
+                SINGLEIMAGE_CHANNEL_NUMBERS_RECORDED_KEY,
+                SINGLEIMAGE_CHANNEL_NAMES_RECORDED_KEY,
+                SINGLEIMAGE_PMT_GAIN_0_KEY,
+                SINGLEIMAGE_PMT_GAIN_1_KEY,
+                SINGLEIMAGE_STAGE_X_KEY,
+                SINGLEIMAGE_STAGE_Y_KEY,
+                SINGLEIMAGE_Z_FOCUS_KEY,
+                SINGLEIMAGE_ZOOM_KEY,
+                SINGLEIMAGE_LASER_WAVELENGTH_NM_KEY,
+                SINGLEIMAGE_LASER_POWER_KEY,
+                SINGLEIMAGE_FOV_SIZE_UM_KEY,
+                SINGLEIMAGE_RESOLUTION_PIX_KEY,
+            )
+        }
+
     existing_references = existing_attachment_references(payload_defaults)
     options = normalize_options(config.get(OPTIONS_KEY))
 
@@ -2490,6 +2826,23 @@ def render_invivo2p_form(
                     defaults=payload_defaults,
                 )
             )
+        
+        st.divider()
+        st.markdown("### PrairieView SingleImage Metadata")
+
+        render_prairieview_singleimage_xml_import(
+            form_key=form_key,
+        )
+
+        if st.session_state.get(
+            invivo2p_key(form_key, INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY)
+        ):
+            imaging_values.update(
+                render_prairieview_singleimage_metadata_display(
+                    form_key=form_key,
+                    defaults=payload_defaults,
+                )
+            )
    
     raw_data_paths = render_raw_data_paths(
         form_key=form_key,
@@ -2558,6 +2911,10 @@ def render_invivo2p_form(
             ),
             markpoints_xml_metadata_values=st.session_state.get(
                 invivo2p_key(form_key, INVIVO2P_MARKPOINTS_XML_METADATA_KEY),
+                imaging_values,
+            ),
+            singleimage_xml_metadata_values=st.session_state.get(
+                invivo2p_key(form_key, INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY),
                 imaging_values,
             ),
             green_construct=clean_string(channel_values[GREEN_CONSTRUCT_KEY]),

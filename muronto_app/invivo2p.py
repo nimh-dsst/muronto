@@ -243,6 +243,43 @@ MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY: Final[str] = (
     "markpoints_spiral_size_um_values"
 )
 
+# ------------------------------------------------------------------
+# Single Image Constants
+# ------------------------------------------------------------------
+
+SINGLEIMAGE_XML_FILENAME_KEY: Final[str] = "singleimage_xml_filename"
+SINGLEIMAGE_PRAIRIEVIEW_VERSION_KEY: Final[str] = "singleimage_pv_version"
+
+SINGLEIMAGE_OBJECTIVE_KEY: Final[str] = "singleimage_objective_name"
+SINGLEIMAGE_OBJECTIVE_MAGNIFICATION_KEY: Final[str] = (
+    "singleimage_objective_magnification"
+)
+SINGLEIMAGE_OBJECTIVE_NA_KEY: Final[str] = "singleimage_objective_na"
+
+SINGLEIMAGE_NUM_CHANNELS_RECORDED_KEY: Final[str] = (
+    "singleimage_num_channels_recorded"
+)
+SINGLEIMAGE_CHANNEL_NUMBERS_RECORDED_KEY: Final[str] = (
+    "singleimage_channel_numbers_recorded"
+)
+SINGLEIMAGE_CHANNEL_NAMES_RECORDED_KEY: Final[str] = (
+    "singleimage_channel_names_recorded"
+)
+
+SINGLEIMAGE_PMT_GAIN_0_KEY: Final[str] = "singleimage_pmt_gain_0"
+SINGLEIMAGE_PMT_GAIN_1_KEY: Final[str] = "singleimage_pmt_gain_1"
+
+SINGLEIMAGE_STAGE_X_KEY: Final[str] = "singleimage_stage_x"
+SINGLEIMAGE_STAGE_Y_KEY: Final[str] = "singleimage_stage_y"
+SINGLEIMAGE_Z_FOCUS_KEY: Final[str] = "singleimage_z_focus"
+
+SINGLEIMAGE_ZOOM_KEY: Final[str] = "singleimage_optical_zoom"
+SINGLEIMAGE_LASER_WAVELENGTH_NM_KEY: Final[str] = (
+    "singleimage_laser_wavelength_nm"
+)
+SINGLEIMAGE_LASER_POWER_KEY: Final[str] = "singleimage_laser_power_0"
+SINGLEIMAGE_FOV_SIZE_UM_KEY: Final[str] = "singleimage_fov_size_um"
+SINGLEIMAGE_RESOLUTION_PIX_KEY: Final[str] = "singleimage_resolution_pix"
 
 # ------------------------------------------------------------------
 # Notes / attachments
@@ -378,6 +415,26 @@ INVIVO2P_MARKPOINTS_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
     MARKPOINTS_SPIRAL_SIZE_UM_VALUES_KEY,
 )
 
+INVIVO2P_SINGLEIMAGE_XML_METADATA_FIELD_KEYS: Final[tuple[str, ...]] = (
+    SINGLEIMAGE_XML_FILENAME_KEY,
+    SINGLEIMAGE_PRAIRIEVIEW_VERSION_KEY,
+    SINGLEIMAGE_OBJECTIVE_KEY,
+    SINGLEIMAGE_OBJECTIVE_MAGNIFICATION_KEY,
+    SINGLEIMAGE_OBJECTIVE_NA_KEY,
+    SINGLEIMAGE_NUM_CHANNELS_RECORDED_KEY,
+    SINGLEIMAGE_CHANNEL_NUMBERS_RECORDED_KEY,
+    SINGLEIMAGE_CHANNEL_NAMES_RECORDED_KEY,
+    SINGLEIMAGE_PMT_GAIN_0_KEY,
+    SINGLEIMAGE_PMT_GAIN_1_KEY,
+    SINGLEIMAGE_STAGE_X_KEY,
+    SINGLEIMAGE_STAGE_Y_KEY,
+    SINGLEIMAGE_Z_FOCUS_KEY,
+    SINGLEIMAGE_ZOOM_KEY,
+    SINGLEIMAGE_LASER_WAVELENGTH_NM_KEY,
+    SINGLEIMAGE_LASER_POWER_KEY,
+    SINGLEIMAGE_FOV_SIZE_UM_KEY,
+    SINGLEIMAGE_RESOLUTION_PIX_KEY,
+)
 
 class Invivo2pValidationError(ValueError):
     """Raised when invivo2p form values do not make a valid payload."""
@@ -955,6 +1012,7 @@ def build_invivo2p_payload(
     tseries_xml_metadata_values: Mapping[str, object] | None = None,
     voltage_xml_metadata_values: Mapping[str, object] | None = None,
     markpoints_xml_metadata_values: Mapping[str, object] | None = None,
+    singleimage_xml_metadata_values: Mapping[str, object] | None = None,
     allow_incomplete: bool = False,
     draft_id: str = "",
 ) -> dict[str, Any]:
@@ -1094,6 +1152,7 @@ def build_invivo2p_payload(
         **clean_tseries_xml_metadata_values(tseries_xml_metadata_values),
         **clean_voltage_xml_metadata_values(voltage_xml_metadata_values),
         **clean_markpoints_xml_metadata_values(markpoints_xml_metadata_values),
+        **clean_singleimage_xml_metadata_values(singleimage_xml_metadata_values),
         **channel_fields,
         NUM_FOVS_KEY: cleaned_num_fovs,
         FOVS_KEY: cleaned_fovs,
@@ -1167,6 +1226,23 @@ def clean_markpoints_xml_metadata_values(
 
     cleaned: dict[str, object] = {}
     for key in INVIVO2P_MARKPOINTS_XML_METADATA_FIELD_KEYS:
+        value = values.get(key)
+        if value in ("", None):
+            cleaned[key] = ""
+            continue
+        cleaned[key] = value
+
+    return cleaned
+
+
+def clean_singleimage_xml_metadata_values(
+    values: Mapping[str, object] | None,
+) -> dict[str, object]:
+    if not isinstance(values, Mapping):
+        return {}
+
+    cleaned: dict[str, object] = {}
+    for key in INVIVO2P_SINGLEIMAGE_XML_METADATA_FIELD_KEYS:
         value = values.get(key)
         if value in ("", None):
             cleaned[key] = ""
