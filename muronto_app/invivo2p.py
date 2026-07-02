@@ -10,8 +10,6 @@ from typing import Any, Final
 
 from muronto_app.config import (
     BEHAVIOR_RIG_OPTIONS_KEY,
-    BEHAVIOR_TASK_NAME_OPTIONS_KEY,
-    BEHAVIOR_TASK_PHASE_OPTIONS_KEY,
     CAMERA_ACQ_SOFTWARE_OPTIONS_KEY,
     CAMERA_MODEL_OPTIONS_KEY,
     CAMERA_VIEW_OPTIONS_KEY,
@@ -30,7 +28,6 @@ from muronto_app.config import (
     RED_CHANNEL_SUBSTRATE_OPTIONS_KEY,
     RED_CONSTRUCT_OPTIONS_KEY,
     SENSORY_STIMULUS_TYPE_OPTIONS_KEY,
-    SESSION_TYPE_OPTIONS_KEY,
     add_option,
     clean_string,
     normalize_options,
@@ -58,8 +55,9 @@ INVIVO2P_DRAFT_ID_KEY: Final[str] = "invivo2p_draft_id"
 SESSION_DATE_KEY: Final[str] = "session_date"
 SESSION_ID_KEY: Final[str] = "session_id"
 SESSION_TYPE_KEY: Final[str] = "session_type"
-BEHAVIOR_TASK_NAME_KEY: Final[str] = "behavior_task_name"
-BEHAVIOR_TASK_PHASE_KEY: Final[str] = "behavior_task_phase"
+BEHAVIOR_TYPE_KEY: Final[str] = "behavior_type"
+SESSION_PHASE_KEY: Final[str] = "session_phase"
+DATA_TYPES_KEY: Final[str] = "data_types"
 
 IMAGER_KEY: Final[str] = "imager"
 START_TIME_KEY: Final[str] = "start_time"
@@ -482,10 +480,15 @@ def invivo2p_record_file_token(payload: Mapping[str, Any]) -> str:
 def _validate_required(
     *,
     field_name: str,
-    value: str,
+    value: object,
     errors: list[str],
 ) -> None:
-    if not value:
+    if isinstance(value, list):
+        if not value:
+            errors.append(f"{field_name} is required.")
+        return
+
+    if not clean_string(value):
         errors.append(f"{field_name} is required.")
 
 
@@ -979,6 +982,14 @@ def _validate_channel_fields(
     }
 
 
+def clean_string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [clean_string(item) for item in value if clean_string(item)]
+
+    cleaned = clean_string(value)
+    return [cleaned] if cleaned else []
+
+
 def build_invivo2p_payload(
     *,
     project_id: str,
@@ -987,9 +998,10 @@ def build_invivo2p_payload(
     ear_tag: str,
     session_date: date | None,
     session_id: str,
-    session_type: str,
-    behavior_task_name: str,
-    behavior_task_phase: str,
+    session_type: object,
+    behavior_type: object,
+    session_phase: object,
+    data_types: object,
     imager: str,
     start_time: time | None,
     end_time: time | None,
@@ -1022,9 +1034,10 @@ def build_invivo2p_payload(
     cleaned_animal_id = clean_string(animal_id)
     cleaned_ear_tag = clean_string(ear_tag)
     cleaned_session_id = clean_string(session_id)
-    cleaned_session_type = clean_string(session_type)
-    cleaned_behavior_task_name = clean_string(behavior_task_name)
-    cleaned_behavior_task_phase = clean_string(behavior_task_phase)
+    cleaned_session_type = clean_string_list(session_type)
+    cleaned_behavior_type = clean_string_list(behavior_type)
+    cleaned_session_phase = clean_string_list(session_phase)
+    cleaned_data_types = clean_string_list(data_types)
     cleaned_imager = clean_string(imager)
     cleaned_invivo2p_system_id = clean_string(invivo2p_system_id)
     cleaned_invivo2p_software_name = clean_string(invivo2p_software_name)
@@ -1040,8 +1053,9 @@ def build_invivo2p_payload(
         (EAR_TAG_LABEL, cleaned_ear_tag),
         (SESSION_ID_KEY, cleaned_session_id),
         (SESSION_TYPE_KEY, cleaned_session_type),
-        (BEHAVIOR_TASK_NAME_KEY, cleaned_behavior_task_name),
-        (BEHAVIOR_TASK_PHASE_KEY, cleaned_behavior_task_phase),
+        (BEHAVIOR_TYPE_KEY, cleaned_behavior_type),
+        (SESSION_PHASE_KEY, cleaned_session_phase),
+        (DATA_TYPES_KEY, cleaned_data_types),
         (IMAGER_KEY, cleaned_imager),
         (INVIVO2P_SYSTEM_ID_KEY, cleaned_invivo2p_system_id),
         (INVIVO2P_SOFTWARE_NAME_KEY, cleaned_invivo2p_software_name),
@@ -1052,17 +1066,6 @@ def build_invivo2p_payload(
             value=value,
             errors=errors,
         )
-
-    if (
-        cleaned_session_type
-        and cleaned_session_type not in INVIVO2P_SESSION_TYPE_OPTIONS
-    ):
-        errors.append(
-            f"{SESSION_TYPE_KEY} must be one of "
-            + ", ".join(INVIVO2P_SESSION_TYPE_OPTIONS)
-            + "."
-        )
-
     formatted_session_date = _format_date_or_error(
         field_name=SESSION_DATE_KEY,
         value=session_date,
@@ -1141,8 +1144,9 @@ def build_invivo2p_payload(
         SESSION_DATE_KEY: formatted_session_date,
         SESSION_ID_KEY: cleaned_session_id,
         SESSION_TYPE_KEY: cleaned_session_type,
-        BEHAVIOR_TASK_NAME_KEY: cleaned_behavior_task_name,
-        BEHAVIOR_TASK_PHASE_KEY: cleaned_behavior_task_phase,
+        BEHAVIOR_TYPE_KEY: cleaned_behavior_type,
+        SESSION_PHASE_KEY: cleaned_session_phase,
+        DATA_TYPES_KEY: cleaned_data_types,
         IMAGER_KEY: cleaned_imager,
         START_TIME_KEY: formatted_start_time,
         END_TIME_KEY: formatted_end_time,
@@ -1267,8 +1271,6 @@ def invivo2p_option_values(
     list[str],
     list[str],
     list[str],
-    list[str],
-    list[str],
 ]:
     """Return reusable invivo2p option values from a payload."""
     sensory_stimulus_types: list[str] = []
@@ -1319,9 +1321,6 @@ def invivo2p_option_values(
                     imaging_layers.append(imaging_layer)
 
     return (
-        [clean_string(payload.get(SESSION_TYPE_KEY))],
-        [clean_string(payload.get(BEHAVIOR_TASK_NAME_KEY))],
-        [clean_string(payload.get(BEHAVIOR_TASK_PHASE_KEY))],
         [clean_string(payload.get(IMAGER_KEY))],
         [clean_string(payload.get(INVIVO2P_SYSTEM_ID_KEY))],
         [clean_string(payload.get(INVIVO2P_SOFTWARE_NAME_KEY))],
@@ -1344,9 +1343,6 @@ def invivo2p_option_values(
 def with_invivo2p_options(
     config: Mapping[str, Any],
     *,
-    session_types: Iterable[str] = (),
-    behavior_task_names: Iterable[str] = (),
-    behavior_task_phases: Iterable[str] = (),
     imagers: Iterable[str] = (),
     invivo2p_system_ids: Iterable[str] = (),
     invivo2p_software_names: Iterable[str] = (),
@@ -1369,12 +1365,6 @@ def with_invivo2p_options(
     options = normalize_options(updated_config.get(OPTIONS_KEY))
     original_options = deepcopy(options)
 
-    for session_type in session_types:
-        add_option(options, SESSION_TYPE_OPTIONS_KEY, session_type)
-    for behavior_task_name in behavior_task_names:
-        add_option(options, BEHAVIOR_TASK_NAME_OPTIONS_KEY, behavior_task_name)
-    for behavior_task_phase in behavior_task_phases:
-        add_option(options, BEHAVIOR_TASK_PHASE_OPTIONS_KEY, behavior_task_phase)
     for imager in imagers:
         add_option(options, INVIVO2P_IMAGER_OPTIONS_KEY, imager)
     for system_id in invivo2p_system_ids:
@@ -1430,9 +1420,6 @@ def with_invivo2p_payload_options(
 ) -> tuple[dict[str, Any], bool]:
     """Return config updated with reusable options from an invivo2p payload."""
     (
-        session_types,
-        behavior_task_names,
-        behavior_task_phases,
         imagers,
         invivo2p_system_ids,
         invivo2p_software_names,
@@ -1453,9 +1440,6 @@ def with_invivo2p_payload_options(
 
     return with_invivo2p_options(
         config,
-        session_types=session_types,
-        behavior_task_names=behavior_task_names,
-        behavior_task_phases=behavior_task_phases,
         imagers=imagers,
         invivo2p_system_ids=invivo2p_system_ids,
         invivo2p_software_names=invivo2p_software_names,

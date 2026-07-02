@@ -30,8 +30,6 @@ from muronto_app.singleimage_xml_metadata_auditor import (
 
 from muronto_app.config import (
     BEHAVIOR_RIG_OPTIONS_KEY,
-    BEHAVIOR_TASK_NAME_OPTIONS_KEY,
-    BEHAVIOR_TASK_PHASE_OPTIONS_KEY,
     CAMERA_ACQ_SOFTWARE_OPTIONS_KEY,
     CAMERA_MODEL_OPTIONS_KEY,
     CAMERA_VIEW_OPTIONS_KEY,
@@ -50,7 +48,6 @@ from muronto_app.config import (
     RED_CHANNEL_SUBSTRATE_OPTIONS_KEY,
     RED_CONSTRUCT_OPTIONS_KEY,
     SENSORY_STIMULUS_TYPE_OPTIONS_KEY,
-    SESSION_TYPE_OPTIONS_KEY,
     choice_options,
     clean_string,
     investigator_for_user,
@@ -89,8 +86,9 @@ from muronto_app.subject import (
 from muronto_app.invivo2p import (
     ATTACHMENTS_KEY,
     BEHAVIOR_RIG_KEY,
-    BEHAVIOR_TASK_NAME_KEY,
-    BEHAVIOR_TASK_PHASE_KEY,
+    BEHAVIOR_TYPE_KEY,
+    SESSION_PHASE_KEY,
+    DATA_TYPES_KEY,
     CAMERA_ACQ_SOFTWARE_KEY,
     CAMERA_VIEW_KEY,
     CAMERA_FRAME_RATE_HZ_KEY,
@@ -231,16 +229,36 @@ INVIVO2P_VOLTAGE_XML_METADATA_KEY = "invivo2p_voltage_xml_metadata"
 INVIVO2P_MARKPOINTS_XML_METADATA_KEY = "invivo2p_markpoints_xml_metadata"
 INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY = "invivo2p_singleimage_xml_metadata"
 
-COMMON_BEHAVIOR_TASK_PHASE_OPTIONS = (
+SESSION_TYPE_CHOICES = [
+    "Structural 2P Imaging",
+    "Functional 2P Imaging",
+    "Functional 2P Imaging + WF Opto",
+    "Functional 2P Imaging + SLM Opto",
+    "Electroporation",
+    "Behavior Only",
+    OTHER_CHOICE,
+]
+
+BEHAVIOR_TYPE_CHOICES = [
+    "Voluntary Running",
+    "Forced Running",
+    "Whisker Bar",
+    "Sensory Evidence Accumulation",
+    "None",
+    OTHER_CHOICE,
+]
+
+COMMON_SESSION_PHASE_CHOICES = [
     "Habituation",
     "Training",
     "Testing",
-    "n/a",
-)
+    "Virus Injection",
+    "Expression Check",
+    "None",
+    OTHER_CHOICE,
+]
 
-SEASIC_TASK_NAME = "Sensory Evidence Accumulation"
-
-SEASIC_BEHAVIOR_TASK_PHASE_OPTIONS = (
+SEASIC_SESSION_PHASE_CHOICES = [
     "Phase 0: Habituation",
     "Phase 1A: Lick Port Training",
     "Phase 1B: Reduce Lick Port Availability",
@@ -249,15 +267,22 @@ SEASIC_BEHAVIOR_TASK_PHASE_OPTIONS = (
     "Phase 3A: Intro Evidence LED and Single Stim Forced Choice",
     "Phase 3B: Intro Delay Between Evidence and Response Windows",
     "Phase 3C: Bidirectional Push and Pull Reward",
-    "Phase 3D: Reduce response Window",
+    "Phase 3D: Reduce Response Window",
     "Phase 3E: Intro Delay Between Threshold Response and Reward",
     "Phase 4A: Intro Multiple Identical Stimuli per Trial",
     "Phase 4B: Intro Mixed Stimuli per Trial",
     "Phase 5: Testing with No Expectation Cue",
-    "Phase 6: Training Expecation Cue",
+    "Phase 6: Training Expectation Cue",
     "Phase 7: Testing Expectation Cue",
-    "n/a",
-)
+    OTHER_CHOICE,
+]
+
+DATA_TYPE_CHOICES = [
+    "TSeries",
+    "Voltage Recording",
+    "MarkPoints",
+    "Single Image",
+]
 
 st.set_page_config(page_title="Muronto In Vivo 2P", layout="centered")
 
@@ -330,6 +355,14 @@ def mapping_list_default(value: object) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [dict(item) for item in value if isinstance(item, Mapping)]
+
+
+def string_list_default(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [clean_string(item) for item in value if clean_string(item)]
+
+    cleaned = clean_string(value)
+    return [cleaned] if cleaned else []
 
 
 def parse_session_date(value: object) -> date | None:
@@ -498,6 +531,50 @@ def render_select_with_immediate_other(
             value="" if cleaned_value in option_choices else cleaned_value,
         )
     )
+
+
+def render_multiselect_with_other(
+    *,
+    label: str,
+    widget_key: str,
+    choices: list[str],
+    default: object = None,
+) -> list[str]:
+    default_values = string_list_default(default)
+
+    known_defaults = [value for value in default_values if value in choices]
+    unknown_defaults = [value for value in default_values if value not in choices]
+
+    selected_defaults = list(known_defaults)
+    other_default = ", ".join(unknown_defaults)
+
+    if other_default and OTHER_CHOICE in choices:
+        selected_defaults.append(OTHER_CHOICE)
+
+    selected = st.multiselect(
+        label,
+        options=choices,
+        default=selected_defaults,
+        key=widget_key,
+    )
+
+    other_value = ""
+
+    if OTHER_CHOICE in selected:
+        other_value = clean_string(
+            st.text_input(
+                f"New {label}",
+                key=f"{widget_key}_other",
+                value=other_default,
+            )
+        )
+
+    selected = [value for value in selected if value != OTHER_CHOICE]
+
+    if other_value:
+        selected.append(other_value)
+
+    return selected
 
 
 def render_session_date(
@@ -857,13 +934,6 @@ def save_general_invivo2p_attachments(
     return references
 
 
-def behavior_task_phase_choices(behavior_task_name: str) -> list[str]:
-    if clean_string(behavior_task_name) == SEASIC_TASK_NAME:
-        return [*SEASIC_BEHAVIOR_TASK_PHASE_OPTIONS, OTHER_CHOICE]
-
-    return [*COMMON_BEHAVIOR_TASK_PHASE_OPTIONS, OTHER_CHOICE]
-
-
 def render_session_details(
     *,
     options: dict[str, list[str]],
@@ -882,31 +952,33 @@ def render_session_details(
             key=invivo2p_key(form_key, "session_id"),
             value=string_default(defaults, SESSION_ID_KEY),
         )
-        session_type = render_select_with_immediate_other(
+
+        session_type = render_multiselect_with_other(
             label="Session Type",
-            options=options,
-            options_key=SESSION_TYPE_OPTIONS_KEY,
             widget_key=invivo2p_key(form_key, "session_type"),
-            other_prompt="New Session Type",
-            value=string_default(defaults, SESSION_TYPE_KEY),
+            choices=SESSION_TYPE_CHOICES,
+            default=defaults.get(SESSION_TYPE_KEY),
         )
-        behavior_task_name = render_select_with_immediate_other(
-            label="Behavior Task Name",
-            options=options,
-            options_key=BEHAVIOR_TASK_NAME_OPTIONS_KEY,
-            widget_key=invivo2p_key(form_key, "behavior_task_name"),
-            other_prompt="New Behavior Task Name",
-            value=string_default(defaults, BEHAVIOR_TASK_NAME_KEY),
+
+        behavior_type = render_multiselect_with_other(
+            label="Behavior Type",
+            widget_key=invivo2p_key(form_key, "behavior_type"),
+            choices=BEHAVIOR_TYPE_CHOICES,
+            default=defaults.get(BEHAVIOR_TYPE_KEY),
         )
-        behavior_task_phase = render_select_with_immediate_other(
-            label="Behavior Task Phase",
-            options=options,
-            options_key=BEHAVIOR_TASK_PHASE_OPTIONS_KEY,
-            widget_key=invivo2p_key(form_key, "behavior_task_phase"),
-            other_prompt="New Behavior Task Phase",
-            value=string_default(defaults, BEHAVIOR_TASK_PHASE_KEY),
-            choices=behavior_task_phase_choices(behavior_task_name),
+
+        if "Sensory Evidence Accumulation" in behavior_type:
+            phase_choices = SEASIC_SESSION_PHASE_CHOICES
+        else:
+            phase_choices = COMMON_SESSION_PHASE_CHOICES
+
+        session_phase = render_multiselect_with_other(
+            label="Session Phase",
+            widget_key=invivo2p_key(form_key, "session_phase"),
+            choices=phase_choices,
+            default=defaults.get(SESSION_PHASE_KEY),
         )
+
         imager = render_select_with_immediate_other(
             label="Imager",
             options=options,
@@ -930,8 +1002,8 @@ def render_session_details(
         SESSION_DATE_KEY: session_date,
         SESSION_ID_KEY: session_id,
         SESSION_TYPE_KEY: session_type,
-        BEHAVIOR_TASK_NAME_KEY: behavior_task_name,
-        BEHAVIOR_TASK_PHASE_KEY: behavior_task_phase,
+        BEHAVIOR_TYPE_KEY: behavior_type,
+        SESSION_PHASE_KEY: session_phase,
         IMAGER_KEY: imager,
         START_TIME_KEY: start_time,
         END_TIME_KEY: end_time,
@@ -1801,8 +1873,9 @@ def render_prairieview_tseries_xml_import(*, form_key: str) -> dict[str, Any]:
             st.json(muronto_tseries_metadata)
 
         if st.button(
-            "Apply TSeries XML metadata to record",
+            "Apply TSeries metadata to record",
             key=invivo2p_key(form_key, "apply_tseries_xml_metadata"),
+            type="primary",
             use_container_width=True,
         ):
             st.session_state[
@@ -1912,8 +1985,9 @@ def render_prairieview_voltage_xml_import(*, form_key: str) -> dict[str, Any]:
             st.json(muronto_voltage_metadata)
 
         if st.button(
-            "Apply Voltage XML metadata to record",
+            "Apply Voltage metadata to record",
             key=invivo2p_key(form_key, "apply_voltage_xml_metadata"),
+            type="primary",
             use_container_width=True,
         ):
             st.session_state[
@@ -2056,8 +2130,9 @@ def render_prairieview_markpoints_xml_import(*, form_key: str) -> dict[str, Any]
             st.json(muronto_markpoints_metadata)
 
         if st.button(
-            "Apply MarkPoints XML metadata to record",
+            "Apply MarkPoints metadata to record",
             key=invivo2p_key(form_key, "apply_markpoints_xml_metadata"),
+            type="primary",
             use_container_width=True,
         ):
             st.session_state[
@@ -2152,7 +2227,7 @@ def render_prairieview_singleimage_xml_import(*, form_key: str) -> dict[str, Any
         }
 
     with st.expander(
-        "PrairieView SingleImage XML Metadata Import",
+        "PrairieView Single Image XML Metadata Import",
         expanded=True,
     ):
         uploaded_singleimage_xml = st.file_uploader(
@@ -2188,8 +2263,9 @@ def render_prairieview_singleimage_xml_import(*, form_key: str) -> dict[str, Any
             st.json(muronto_singleimage_metadata)
 
         if st.button(
-            "Apply SingleImage XML metadata to record",
+            "Apply SingleImage metadata to record",
             key=invivo2p_key(form_key, "apply_singleimage_xml_metadata"),
+            type="primary",
             use_container_width=True,
         ):
             st.session_state[
@@ -2783,7 +2859,17 @@ def render_invivo2p_form(
         form_key=form_key,
         defaults=payload_defaults,
     )
-
+    with st.expander("Data Types", expanded=True):
+        data_types = st.multiselect(
+            "Data Types",
+            DATA_TYPE_CHOICES,
+            default=[
+                value
+                for value in string_list_default(payload_defaults.get(DATA_TYPES_KEY))
+                if value in DATA_TYPE_CHOICES
+            ],
+            key=invivo2p_key(form_key, "data_types"),
+        )
     imaging_values = render_imaging_behavior_systems(
         options=options,
         form_key=form_key,
@@ -2813,73 +2899,85 @@ def render_invivo2p_form(
         values=mapping_list_default(payload_defaults.get(CAMERAS_KEY)),
     )
     
-    with st.expander("Metadata", expanded=True):
-        st.markdown("### TSeries Metadata")
+    if data_types:
 
-        render_prairieview_tseries_xml_import(
-            form_key=form_key,
+        with st.expander("Metadata", expanded=True):
+            rendered_metadata_section = False
+
+            if "TSeries" in data_types:
+                st.markdown("### TSeries Metadata")
+                render_prairieview_tseries_xml_import(form_key=form_key)
+
+                if st.session_state.get(
+                    invivo2p_key(form_key, INVIVO2P_TSERIES_XML_METADATA_KEY)
+                ):
+                    imaging_values.update(
+                        render_prairieview_tseries_metadata_display(
+                            form_key=form_key,
+                            defaults=payload_defaults,
+                        )
+                    )
+
+                rendered_metadata_section = True
+
+            if "Voltage Recording" in data_types:
+                if rendered_metadata_section:
+                    st.divider()
+
+                st.markdown("### Voltage Metadata")
+                render_prairieview_voltage_xml_import(form_key=form_key)
+
+                if st.session_state.get(
+                    invivo2p_key(form_key, INVIVO2P_VOLTAGE_XML_METADATA_KEY)
+                ):
+                    imaging_values.update(
+                        render_prairieview_voltage_metadata_display(
+                            form_key=form_key,
+                            defaults=payload_defaults,
+                        )
+                    )
+
+                rendered_metadata_section = True
+
+            if "MarkPoints" in data_types:
+                if rendered_metadata_section:
+                    st.divider()
+
+                st.markdown("### MarkPoints Metadata")
+                render_prairieview_markpoints_xml_import(form_key=form_key)
+
+                if st.session_state.get(
+                    invivo2p_key(form_key, INVIVO2P_MARKPOINTS_XML_METADATA_KEY)
+                ):
+                    imaging_values.update(
+                        render_prairieview_markpoints_metadata_display(
+                            form_key=form_key,
+                            defaults=payload_defaults,
+                        )
+                    )
+
+                rendered_metadata_section = True
+
+            if "Single Image" in data_types:
+                if rendered_metadata_section:
+                    st.divider()
+
+                st.markdown("### Single Image Metadata")
+                render_prairieview_singleimage_xml_import(form_key=form_key)
+
+                if st.session_state.get(
+                    invivo2p_key(form_key, INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY)
+                ):
+                    imaging_values.update(
+                        render_prairieview_singleimage_metadata_display(
+                            form_key=form_key,
+                            defaults=payload_defaults,
+                        )
+                    )
+    else:
+        st.info(
+            "Select one or more Data Types to enable metadata import."
         )
-
-        if st.session_state.get(
-            invivo2p_key(form_key, INVIVO2P_TSERIES_XML_METADATA_KEY)
-        ):
-            imaging_values.update(
-                render_prairieview_tseries_metadata_display(
-                    form_key=form_key,
-                    defaults=payload_defaults,
-                )
-            )
-
-        st.divider()
-        st.markdown("### Voltage Metadata")
-
-        render_prairieview_voltage_xml_import(
-            form_key=form_key,
-        )
-
-        if st.session_state.get(
-            invivo2p_key(form_key, INVIVO2P_VOLTAGE_XML_METADATA_KEY)
-        ):
-            imaging_values.update(
-                render_prairieview_voltage_metadata_display(
-                    form_key=form_key,
-                    defaults=payload_defaults,
-                )
-            )
-
-        st.divider()
-        st.markdown("### MarkPoints Metadata")
-
-        render_prairieview_markpoints_xml_import(
-            form_key=form_key,
-        )
-
-        if st.session_state.get(
-            invivo2p_key(form_key, INVIVO2P_MARKPOINTS_XML_METADATA_KEY)
-        ):
-            imaging_values.update(
-                render_prairieview_markpoints_metadata_display(
-                    form_key=form_key,
-                    defaults=payload_defaults,
-                )
-            )
-        
-        st.divider()
-        st.markdown("### PrairieView SingleImage Metadata")
-
-        render_prairieview_singleimage_xml_import(
-            form_key=form_key,
-        )
-
-        if st.session_state.get(
-            invivo2p_key(form_key, INVIVO2P_SINGLEIMAGE_XML_METADATA_KEY)
-        ):
-            imaging_values.update(
-                render_prairieview_singleimage_metadata_display(
-                    form_key=form_key,
-                    defaults=payload_defaults,
-                )
-            )
    
     raw_data_paths = render_raw_data_paths(
         form_key=form_key,
@@ -2920,13 +3018,10 @@ def render_invivo2p_form(
             ear_tag=subject_payload.get(EAR_TAG_KEY, ""),
             session_date=session_values[SESSION_DATE_KEY],
             session_id=clean_string(session_values[SESSION_ID_KEY]),
-            session_type=clean_string(session_values[SESSION_TYPE_KEY]),
-            behavior_task_name=clean_string(
-                session_values[BEHAVIOR_TASK_NAME_KEY]
-            ),
-            behavior_task_phase=clean_string(
-                session_values[BEHAVIOR_TASK_PHASE_KEY]
-            ),
+            session_type=session_values[SESSION_TYPE_KEY],
+            behavior_type=session_values[BEHAVIOR_TYPE_KEY],
+            session_phase=session_values[SESSION_PHASE_KEY],
+            data_types=data_types,
             imager=clean_string(session_values[IMAGER_KEY]),
             start_time=session_values[START_TIME_KEY],
             end_time=session_values[END_TIME_KEY],
