@@ -308,10 +308,12 @@ INVIVO2P_FILE_UPLOAD_TYPES: Final[tuple[str, ...]] = (
 # Raw data file paths
 # ------------------------------------------------------------------
 
-RAW_2P_IMAGING_DATA_PATH_KEY: Final[str] = "raw_2p_imaging_data_path"
-RAW_2P_IMAGING_METADATA_PATH_KEY: Final[str] = "raw_2p_imaging_metadata_path"
-RAW_2P_SYNC_DATA_PATH_KEY: Final[str] = "raw_2p_sync_data_path"
-RAW_2P_SYNC_METADATA_PATH_KEY: Final[str] = "raw_2p_sync_metadata_path"
+TWO_PHOTON_IMAGING_RAW_DATA_PATH_KEY: Final[str] = (
+    "two_photon_imaging_raw_data_path"
+)
+VIDEO_CAMERA_RAW_DATA_PATH_KEY: Final[str] = (
+    "video_camera_raw_data_path"
+)
 
 # ------------------------------------------------------------------
 # Static option lists
@@ -1003,10 +1005,8 @@ def build_invivo2p_payload(
     fovs: object = (),
     sensory_stimuli: object = (),
     cameras: object = (),
-    raw_2p_imaging_data_path: str = "",
-    raw_2p_imaging_metadata_path: str = "",
-    raw_2p_sync_data_path: str = "",
-    raw_2p_sync_metadata_path: str = "",
+    two_photon_imaging_raw_data_path: str = "",
+    video_camera_raw_data_path: str = "",
     general_notes: str = "",
     attachments: Iterable[Mapping[str, object]] = (),
     tseries_xml_metadata_values: Mapping[str, object] | None = None,
@@ -1158,15 +1158,11 @@ def build_invivo2p_payload(
         FOVS_KEY: cleaned_fovs,
         SENSORY_STIMULI_KEY: cleaned_sensory_stimuli,
         CAMERAS_KEY: cleaned_cameras,
-        RAW_2P_IMAGING_DATA_PATH_KEY: clean_string(
-            raw_2p_imaging_data_path
+        TWO_PHOTON_IMAGING_RAW_DATA_PATH_KEY: clean_string(
+            two_photon_imaging_raw_data_path
         ),
-        RAW_2P_IMAGING_METADATA_PATH_KEY: clean_string(
-            raw_2p_imaging_metadata_path
-        ),
-        RAW_2P_SYNC_DATA_PATH_KEY: clean_string(raw_2p_sync_data_path),
-        RAW_2P_SYNC_METADATA_PATH_KEY: clean_string(
-            raw_2p_sync_metadata_path
+        VIDEO_CAMERA_RAW_DATA_PATH_KEY: clean_string(
+            video_camera_raw_data_path
         ),
         GENERAL_NOTES_KEY: cleaned_general_notes,
         ATTACHMENTS_KEY: cleaned_attachments,

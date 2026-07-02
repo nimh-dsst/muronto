@@ -9,6 +9,9 @@ from uuid import uuid4
 import streamlit as st
 from labapi import ApiError
 
+import tkinter as tk
+from tkinter import filedialog
+
 from muronto_app.tseries_xml_metadata_auditor import (
     parse_tseries_xml_bytes,
 )
@@ -126,10 +129,8 @@ from muronto_app.invivo2p import (
     PLANE_NUMBER_KEY,
     PLANES_KEY,
     PRAIRIEVIEW_VERSION_KEY,
-    RAW_2P_IMAGING_DATA_PATH_KEY,
-    RAW_2P_IMAGING_METADATA_PATH_KEY,
-    RAW_2P_SYNC_DATA_PATH_KEY,
-    RAW_2P_SYNC_METADATA_PATH_KEY,
+    TWO_PHOTON_IMAGING_RAW_DATA_PATH_KEY,
+    VIDEO_CAMERA_RAW_DATA_PATH_KEY,
     RED_CHANNEL_SUBSTRATE_KEY,
     RED_CONSTRUCT_KEY,
     RESOLUTION_PIX_KEY,
@@ -1608,6 +1609,19 @@ def render_general_notes_attachments(
     }
 
 
+def pick_directory() -> str:
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+
+    directory = filedialog.askdirectory(
+        title="Select raw data directory",
+    )
+
+    root.destroy()
+    return directory or ""
+
+
 def render_raw_data_paths(
     *,
     form_key: str,
@@ -1615,33 +1629,58 @@ def render_raw_data_paths(
 ) -> dict[str, str]:
     defaults = defaults or {}
 
-    with st.expander("Raw Data & Metadata Paths", expanded=False):
-        raw_2p_imaging_data_path = st.text_input(
-            "Raw 2P Imaging Data Path",
-            key=invivo2p_key(form_key, "raw_2p_imaging_data_path"),
-            value=string_default(defaults, RAW_2P_IMAGING_DATA_PATH_KEY),
+    with st.expander("Raw Data Paths", expanded=True):
+        two_photon_path_key = invivo2p_key(
+            form_key,
+            "two_photon_imaging_raw_data_path",
         )
-        raw_2p_imaging_metadata_path = st.text_input(
-            "Raw 2P Imaging Metadata Path",
-            key=invivo2p_key(form_key, "raw_2p_imaging_metadata_path"),
-            value=string_default(defaults, RAW_2P_IMAGING_METADATA_PATH_KEY),
+        video_path_key = invivo2p_key(
+            form_key,
+            "video_camera_raw_data_path",
         )
-        raw_2p_sync_data_path = st.text_input(
-            "Raw 2P Sync Data Path",
-            key=invivo2p_key(form_key, "raw_2p_sync_data_path"),
-            value=string_default(defaults, RAW_2P_SYNC_DATA_PATH_KEY),
+
+        st.session_state.setdefault(
+            two_photon_path_key,
+            string_default(defaults, TWO_PHOTON_IMAGING_RAW_DATA_PATH_KEY),
         )
-        raw_2p_sync_metadata_path = st.text_input(
-            "Raw 2P Sync Metadata Path",
-            key=invivo2p_key(form_key, "raw_2p_sync_metadata_path"),
-            value=string_default(defaults, RAW_2P_SYNC_METADATA_PATH_KEY),
+        st.session_state.setdefault(
+            video_path_key,
+            string_default(defaults, VIDEO_CAMERA_RAW_DATA_PATH_KEY),
+        )
+
+        if st.button(
+            "Browse for 2P Imaging Raw Data Path",
+            key=invivo2p_key(form_key, "browse_two_photon_raw_data_path"),
+            use_container_width=True,
+        ):
+            selected = pick_directory()
+            if selected:
+                st.session_state[two_photon_path_key] = selected
+                st.rerun()
+
+        two_photon_imaging_raw_data_path = st.text_input(
+            "2P Imaging Raw Data Path",
+            key=two_photon_path_key,
+        )
+
+        if st.button(
+            "Browse for Video Camera Raw Data Path",
+            key=invivo2p_key(form_key, "browse_video_raw_data_path"),
+            use_container_width=True,
+        ):
+            selected = pick_directory()
+            if selected:
+                st.session_state[video_path_key] = selected
+                st.rerun()
+
+        video_camera_raw_data_path = st.text_input(
+            "Video Camera Raw Data Path",
+            key=video_path_key,
         )
 
     return {
-        RAW_2P_IMAGING_DATA_PATH_KEY: raw_2p_imaging_data_path,
-        RAW_2P_IMAGING_METADATA_PATH_KEY: raw_2p_imaging_metadata_path,
-        RAW_2P_SYNC_DATA_PATH_KEY: raw_2p_sync_data_path,
-        RAW_2P_SYNC_METADATA_PATH_KEY: raw_2p_sync_metadata_path,
+        TWO_PHOTON_IMAGING_RAW_DATA_PATH_KEY: two_photon_imaging_raw_data_path,
+        VIDEO_CAMERA_RAW_DATA_PATH_KEY: video_camera_raw_data_path,
     }
 
 
@@ -2614,10 +2653,8 @@ def render_invivo2p_form(
         payload_defaults[SESSION_ID_KEY] = ""
         payload_defaults[INVIVO2P_DRAFT_ID_KEY] = ""
         payload_defaults[ATTACHMENTS_KEY] = []
-        payload_defaults[RAW_2P_IMAGING_DATA_PATH_KEY] = ""
-        payload_defaults[RAW_2P_IMAGING_METADATA_PATH_KEY] = ""
-        payload_defaults[RAW_2P_SYNC_DATA_PATH_KEY] = ""
-        payload_defaults[RAW_2P_SYNC_METADATA_PATH_KEY] = ""
+        payload_defaults[TWO_PHOTON_IMAGING_RAW_DATA_PATH_KEY] = ""
+        payload_defaults[VIDEO_CAMERA_RAW_DATA_PATH_KEY] = ""
     
     tseries_xml_metadata_state_key = invivo2p_key(
         form_key,
@@ -2777,7 +2814,7 @@ def render_invivo2p_form(
     )
     
     with st.expander("Metadata", expanded=True):
-        st.markdown("### PrairieView TSeries Metadata")
+        st.markdown("### TSeries Metadata")
 
         render_prairieview_tseries_xml_import(
             form_key=form_key,
@@ -2794,7 +2831,7 @@ def render_invivo2p_form(
             )
 
         st.divider()
-        st.markdown("### PrairieView Voltage Metadata")
+        st.markdown("### Voltage Metadata")
 
         render_prairieview_voltage_xml_import(
             form_key=form_key,
@@ -2811,7 +2848,7 @@ def render_invivo2p_form(
             )
 
         st.divider()
-        st.markdown("### PrairieView MarkPoints Metadata")
+        st.markdown("### MarkPoints Metadata")
 
         render_prairieview_markpoints_xml_import(
             form_key=form_key,
@@ -2925,15 +2962,11 @@ def render_invivo2p_form(
             fovs=fovs,
             sensory_stimuli=sensory_stimuli,
             cameras=cameras,
-            raw_2p_imaging_data_path=raw_data_paths[
-                RAW_2P_IMAGING_DATA_PATH_KEY
+            two_photon_imaging_raw_data_path=raw_data_paths[
+                TWO_PHOTON_IMAGING_RAW_DATA_PATH_KEY
             ],
-            raw_2p_imaging_metadata_path=raw_data_paths[
-                RAW_2P_IMAGING_METADATA_PATH_KEY
-            ],
-            raw_2p_sync_data_path=raw_data_paths[RAW_2P_SYNC_DATA_PATH_KEY],
-            raw_2p_sync_metadata_path=raw_data_paths[
-                RAW_2P_SYNC_METADATA_PATH_KEY
+            video_camera_raw_data_path=raw_data_paths[
+                VIDEO_CAMERA_RAW_DATA_PATH_KEY
             ],
             general_notes=general_attachment_values["general_notes"],
             attachments=attachments,
